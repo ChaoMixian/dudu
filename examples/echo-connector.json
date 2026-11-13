@@ -1,0 +1,8 @@
+{
+  "id": "echo",
+  "name": "JSON echo",
+  "description": "Example fixed-command JSON tool; replace the absolute script path before registering",
+  "transport": "command",
+  "argv": ["bun", "/absolute/path/to/dudu/examples/command-tool.ts"],
+  "tools": [{ "name": "echo", "description": "Echo text", "parameters": { "type": "object", "properties": { "text": { "type": "string" } }, "required": ["text"], "additionalProperties": false } }]
+}

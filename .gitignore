@@ -1,0 +1,37 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local runtime data and workspaces
+.zcode/
+.dudu/
+bots/
+connectors/
+data/
+artifacts/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.jsonl
+
+# Secrets and certificates
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Logs and editor/OS noise
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Single-file binary output
+release/

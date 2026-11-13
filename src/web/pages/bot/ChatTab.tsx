@@ -1,0 +1,478 @@
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, Dropdown, Spinner, TextArea, TextField, Tooltip } from '@heroui/react';
+import { useNavigate } from 'react-router-dom';
+import type { BotConfig } from '../../../contracts';
+import type { Message } from '../../lib/types';
+import { request, segment } from '../../lib/api';
+import { botColor } from '../../lib/bot-theme';
+import { useAuth } from '../../auth/AuthContext';
+import { useLive } from '../../state/LiveContext';
+import { useI18n } from '../../i18n';
+import Icon from '../../ui/Icon';
+import BotAvatar from '../../ui/BotAvatar';
+import EmojiPicker from '../../ui/EmojiPicker';
+import MessageAttachments from '../../ui/MessageAttachments';
+import BotThreadDialog from './BotThreadDialog';
+
+type ChatTabProps = {
+  bot: BotConfig;
+  onOpenSettings: () => void;
+  onOpenComputers: (takeover?: boolean) => void;
+};
+
+const TIME_GAP = 30 * 60 * 1000;
+const BOTTOM_THRESHOLD = 96;
+const QUICK_REACTIONS = ['❤️', '👍', '👎', '😂', '🎉'];
+const previewText = (message: Message) => message.text || message.attachments?.map(attachment => attachment.name).join(', ') || '';
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear()
+  && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTabProps) {
+  const { state, run, busy } = useLive();
+  const { token } = useAuth();
+  const { t, locale } = useI18n();
+  const navigate = useNavigate();
+  const palette = botColor(bot.color, bot.name);
+  // Drafts and requests stay scoped to their bot even when navigation happens
+  // before a send request resolves. The input itself is never remounted.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [askDrafts, setAskDrafts] = useState<Record<string, string>>({});
+  const [sendingBots, setSendingBots] = useState<ReadonlySet<string>>(new Set());
+  const sendingRef = useRef(new Set<string>());
+  const composingRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
+  const displayedBotRef = useRef(bot.id);
+  const [showJump, setShowJump] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [threadPeer, setThreadPeer] = useState<BotConfig | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; message: Message } | null>(null);
+  const [emojiTarget, setEmojiTarget] = useState<Message | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const text = drafts[bot.id] ?? '';
+  const sending = sendingBots.has(bot.id);
+  const conversation = useMemo(() => state.messages
+    .filter(message => message.botId === bot.id && message.conversationId === 'default')
+    .sort((a, b) => a.seq - b.seq), [state.messages, bot.id]);
+  const messages = useMemo(() => conversation.filter(message => message.kind !== 'reaction'), [conversation]);
+  const reactions = useMemo(() => {
+    const byTarget = new Map<string, Map<string, { count: number; mine: boolean }>>();
+    for (const message of conversation) {
+      if (message.kind !== 'reaction' || !message.targetId || !message.emoji) continue;
+      const counts = byTarget.get(message.targetId) ?? new Map<string, { count: number; mine: boolean }>();
+      const current = counts.get(message.emoji) ?? { count: 0, mine: false };
+      counts.set(message.emoji, { count: current.count + 1, mine: current.mine || message.sender === 'user' });
+      byTarget.set(message.targetId, counts);
+    }
+    return new Map([...byTarget].map(([target, counts]) => [target, [...counts].map(([emoji, value]) => ({ emoji, ...value }))]));
+  }, [conversation]);
+  const messageById = useMemo(() => new Map(conversation.map(message => [message.id, message])), [conversation]);
+  const lastUserSeq = useMemo(() => messages.reduce((latest, message) => message.sender === 'user' ? Math.max(latest, message.seq) : latest, 0), [messages]);
+  const threads = useMemo(() => (state.botThreads ?? []).filter(thread => thread.botId === bot.id && thread.peerId !== bot.id && state.bots.some(entry => entry.id === thread.peerId)), [state.botThreads, state.bots, bot.id]);
+  const peerFor = (peerId: string | undefined) => peerId ? state.bots.find(entry => entry.id === peerId) : undefined;
+  const thinking = state.statuses.find(entry => entry.botId === bot.id)?.state === 'running';
+  const replyMessage = replyTo ? messageById.get(replyTo) : undefined;
+  const sendDisabled = !text.trim() || sending || Boolean(busy);
+  const modelChoices = useMemo(() => state.providers.flatMap(provider => provider.models.map(model => ({
+    key: `${provider.id}|${model.id}`,
+    provider: provider.id,
+    providerName: provider.name || provider.id,
+    model: model.id,
+    label: model.name && model.name !== model.id ? model.name : model.id,
+  }))), [state.providers]);
+  const activeProvider = bot.provider ?? state.defaults?.provider;
+  const activeModel = bot.model ?? state.defaults?.model;
+  const activeChoice = modelChoices.find(choice => choice.provider === activeProvider && choice.model === activeModel);
+  const defaultChoice = modelChoices.find(choice => choice.provider === state.defaults?.provider && choice.model === state.defaults?.model);
+  const dateLocale = locale === 'zh' ? 'zh-CN' : 'en';
+  const timeFormat = useMemo(() => new Intl.DateTimeFormat(dateLocale, {
+    hour: 'numeric', minute: '2-digit',
+  }), [dateLocale]);
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(dateLocale, {
+    year: 'numeric', month: 'short', day: 'numeric',
+  }), [dateLocale]);
+
+  const jumpToBottom = () => {
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    nearBottomRef.current = true;
+    viewport.scrollTop = viewport.scrollHeight;
+    setShowJump(false);
+  };
+
+  useLayoutEffect(() => {
+    if (displayedBotRef.current !== bot.id) {
+      displayedBotRef.current = bot.id;
+      nearBottomRef.current = true;
+      composingRef.current = false;
+    }
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    if (nearBottomRef.current) {
+      viewport.scrollTop = viewport.scrollHeight;
+      setShowJump(false);
+    } else {
+      setShowJump(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > BOTTOM_THRESHOLD);
+    }
+  }, [bot.id, messages, thinking]);
+
+  useEffect(() => {
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    // Resizing the composer or mobile keyboard must not pull a reader away
+    // from history; follow the latest message only when already near bottom.
+    const observer = new ResizeObserver(() => {
+      if (nearBottomRef.current) viewport.scrollTop = viewport.scrollHeight;
+      setShowJump(!nearBottomRef.current
+        && viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > BOTTOM_THRESHOLD);
+    });
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  const send = async (override?: string) => {
+    const content = (override ?? text).trim();
+    const botId = bot.id;
+    if (!content || busy || (!override && composingRef.current) || sendingRef.current.has(botId)) return;
+    sendingRef.current.add(botId);
+    setSendingBots(new Set(sendingRef.current));
+    try {
+      const succeeded = await run(t('message.send'), () => request(token, '/messages', 'POST', {
+        botId, text: content, conversationId: 'default', ...(replyTo ? { replyTo } : {}),
+      }));
+      if (succeeded) {
+        setReplyTo(null);
+        if (!override) setDrafts(current => current[botId] === text ? { ...current, [botId]: '' } : current);
+      }
+    } finally {
+      sendingRef.current.delete(botId);
+      setSendingBots(new Set(sendingRef.current));
+    }
+  };
+
+  const answerAsk = async (messageId: string, value: string) => {
+    const content = value.trim();
+    if (!content || sending) return;
+    setAskDrafts(current => ({ ...current, [messageId]: '' }));
+    await send(content);
+  };
+
+  const toggleReaction = async (message: Message, emoji: string) => {
+    setMenu(null);
+    setEmojiTarget(null);
+    await run('', () => request(token, '/reactions', 'POST', { botId: bot.id, messageId: message.id, emoji }));
+  };
+
+  const copyText = async (value: string) => {
+    try { await navigator.clipboard.writeText(value); }
+    catch {
+      const area = document.createElement('textarea');
+      area.value = value;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+  };
+
+  const startReply = (message: Message) => {
+    setReplyTo(message.id);
+    setMenu(null);
+    requestAnimationFrame(() => composerRef.current?.focus());
+  };
+
+  const openMenu = (event: ReactMouseEvent, message: Message) => {
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY, message });
+  };
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = (event: Event) => { if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenu(null); };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenu(null); };
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    document.addEventListener('keydown', key);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      document.removeEventListener('keydown', key);
+    };
+  }, [menu]);
+
+  const chooseModel = async (key: string) => {
+    const next = key === 'default' ? { provider: undefined, model: undefined } : (() => {
+      const choice = modelChoices.find(item => item.key === key);
+      return choice ? { provider: choice.provider, model: choice.model } : null;
+    })();
+    if (!next) return;
+    await run(t('bot.save'), () => request(token, `/bots/${segment(bot.id)}`, 'PUT', { ...bot, ...next }));
+  };
+
+  const timestamp = (date: Date) => {
+    if (!Number.isFinite(date.getTime())) return '';
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const day = sameDay(date, today) ? t('ui.today')
+      : sameDay(date, yesterday) ? t('ui.yesterday') : dateFormat.format(date);
+    return `${day} · ${timeFormat.format(date)}`;
+  };
+
+  return (
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col" aria-label={t('bot.chat')}>
+      {threads.length > 0 && (
+        <div className="bot-thread-strip">
+          <span className="bot-thread-strip-label">{t('message.botThreads')}</span>
+          {threads.map(thread => {
+            const peer = peerFor(thread.peerId);
+            if (!peer) return null;
+            return <button key={thread.peerId} type="button" className="bot-thread-chip" onClick={() => setThreadPeer(peer)}>
+              <BotAvatar name={peer.name} avatar={peer.avatar} color={peer.color} size="xs" />
+              <span>{peer.name}</span>
+              <span className="bot-thread-count">{thread.count}</span>
+            </button>;
+          })}
+        </div>
+      )}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [overflow-anchor:none]"
+        onScroll={event => {
+          const viewport = event.currentTarget;
+          const nearBottom = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= BOTTOM_THRESHOLD;
+          nearBottomRef.current = nearBottom;
+          setShowJump(!nearBottom);
+        }}
+      >
+        {!messages.length ? (
+          <div className="flex min-h-full items-center justify-center p-6">
+            <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+              <BotAvatar name={bot.name} avatar={bot.avatar} color={bot.color} size="lg" />
+              <h2 className="text-xl font-semibold tracking-tight">{bot.name}</h2>
+              <p className="text-sm text-muted">{bot.description || t('bot.emptyChat', { name: bot.name })}</p>
+              {thinking && <div className="typing-bubble" aria-label={t('message.thinking')}><span /><span /><span /></div>}
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto w-full max-w-4xl px-4 py-8 md:px-8" role="log" aria-label={t('bot.chat')} aria-relevant="additions text">
+            {messages.map((message, index) => {
+              const previous = messages[index - 1];
+              const date = new Date(message.createdAt);
+              const previousDate = previous ? new Date(previous.createdAt) : null;
+              const separates = !previousDate || !sameDay(previousDate, date)
+                || date.getTime() - previousDate.getTime() >= TIME_GAP;
+              if (message.kind === 'bot_out' || message.kind === 'bot_in') {
+                const peer = peerFor(message.targetId);
+                if (!peer || peer.id === bot.id) return null;
+                return <Fragment key={`${bot.id}:${message.id}`}>
+                  {separates && <div className="my-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted"><time dateTime={message.createdAt}>{timestamp(date)}</time></div>}
+                  <div className="bot-thread-notice-row">
+                    <button type="button" className="bot-thread-notice" onClick={() => setThreadPeer(peer)}>
+                      <BotAvatar name={peer.name} avatar={peer.avatar} color={peer.color} size="xs" />
+                      <span>{t(message.kind === 'bot_out' ? 'message.sentTo' : 'message.receivedFrom', { name: peer.name })}</span>
+                    </button>
+                  </div>
+                </Fragment>;
+              }
+              const consecutive = !separates && previous?.sender === message.sender;
+              const next = messages[index + 1];
+              const nextDate = next ? new Date(next.createdAt) : null;
+              const nextSeparates = !next || !nextDate || !sameDay(nextDate, date)
+                || nextDate.getTime() - date.getTime() >= TIME_GAP;
+              const groupEnd = !next || next.sender !== message.sender || nextSeparates;
+              const own = message.sender !== bot.id;
+              const answered = message.sender === bot.id && message.seq < lastUserSeq;
+              const messageReactions = reactions.get(message.id);
+              const replied = message.replyTo ? messageById.get(message.replyTo) : undefined;
+              const canReact = message.sender === bot.id;
+              return (
+                <Fragment key={`${bot.id}:${message.id}`}>
+                  {separates && <div className="my-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted"><time dateTime={message.createdAt}>{timestamp(date)}</time></div>}
+                  <div className={`flex ${own ? 'justify-end' : 'justify-start'} ${consecutive ? 'mt-1.5' : 'mt-4'}`}>
+                    <div className={`flex min-w-0 max-w-[82%] flex-col gap-1.5 ${own ? 'items-end' : 'items-start'}`}>
+                      <div className={`chat-bubble-wrap ${messageReactions?.length ? 'has-reactions' : ''}`} onContextMenu={event => openMenu(event, message)}>
+                        {!!messageReactions?.length && (
+                          <div className="message-reactions" aria-label={t('message.reactions')}>
+                            {messageReactions.map(({ emoji, count, mine }) => canReact
+                              ? <button key={emoji} type="button" className="message-reaction" data-mine={mine ? 'true' : undefined} title={t('message.reactToggle')} onClick={() => void toggleReaction(message, emoji)}>{emoji}{count > 1 && <span className="message-reaction-count">{count}</span>}</button>
+                              : <span key={emoji} className="message-reaction" data-mine={mine ? 'true' : undefined}>{emoji}{count > 1 && <span className="message-reaction-count">{count}</span>}</span>)}
+                          </div>
+                        )}
+                        <div
+                          className={`chat-bubble ${own ? 'chat-bubble-user' : 'chat-bubble-assistant'} ${consecutive ? '' : 'group-start'} ${groupEnd ? 'group-end' : ''}`}
+                          style={own ? { background: palette.background, color: palette.foreground } : undefined}
+                          title={timestamp(date)}
+                        >
+                          {replied && <div className="reply-quote"><span>{replied.sender === bot.id ? bot.name : t('message.you')}</span><p>{previewText(replied).slice(0, 160)}</p></div>}
+                          {message.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed [overflow-wrap:anywhere]">{message.text}</p>}
+                          <MessageAttachments attachments={message.attachments} />
+                        </div>
+                      </div>
+                      {message.status === 'failed' && (
+                        <span role="status" className="flex items-center gap-1 text-xs text-muted"><Icon name="close" size={12} />{t('message.failed')}</span>
+                      )}
+                      {!own && message.kind === 'message' && index === messages.length - 1 && !answered && !!message.options?.length && (
+                        <div className="message-options">
+                          {message.options.map(option => (
+                            <button key={option} type="button" className="message-option" disabled={sending} onClick={() => void send(option)}>{option}</button>
+                          ))}
+                        </div>
+                      )}
+                      {!own && message.kind === 'ask' && !answered && (
+                        <div className="ask-options">
+                          {message.options?.map(option => (
+                            <button key={option} type="button" className="ask-option" disabled={sending} onClick={() => void send(option)}>
+                              <span>{option}</span><Icon name="chevron" size={14} />
+                            </button>
+                          ))}
+                          <form className="ask-free" onSubmit={event => { event.preventDefault(); void answerAsk(message.id, askDrafts[message.id] ?? ''); }}>
+                            <input
+                              className="ask-free-input"
+                              value={askDrafts[message.id] ?? ''}
+                              onChange={event => setAskDrafts(current => ({ ...current, [message.id]: event.target.value }))}
+                              placeholder={t('message.askPlaceholder')}
+                              aria-label={t('message.askPlaceholder')}
+                              disabled={sending}
+                            />
+                            <button type="submit" className="ask-free-send" disabled={sending || !(askDrafts[message.id] ?? '').trim()} aria-label={t('message.askSubmit')}>
+                              <Icon name="arrowUp" size={15} />
+                            </button>
+                          </form>
+                        </div>
+                      )}
+                      {!own && message.kind === 'takeover' && (
+                        <div className="takeover-card">
+                          <span className="takeover-icon"><Icon name="monitor" size={18} /></span>
+                          <span className="min-w-0 flex-1">
+                            <span className="takeover-title">{t('message.takeoverTitle')}</span>
+                            <span className="takeover-hint">{t('message.takeoverHint')}</span>
+                          </span>
+                          <Button size="sm" variant="secondary" className="rounded-full" onPress={() => onOpenComputers(true)}>{t('message.takeoverOpen')}</Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Fragment>
+              );
+            })}
+            {thinking && <div className="typing-row"><div className="typing-bubble" aria-label={t('message.thinking')}><span /><span /><span /></div></div>}
+          </div>
+        )}
+      </div>
+
+      <div className="relative mx-auto w-full max-w-4xl shrink-0 px-4 pb-5 md:px-8" aria-busy={sending}>
+        {showJump && <div className="absolute inset-x-0 bottom-full flex justify-center pb-3">
+          <Tooltip>
+            <Button isIconOnly size="sm" variant="secondary" className="rounded-full" onPress={jumpToBottom} aria-label={t('ui.jumpBottom')}><Icon name="arrowUp" size={16} className="rotate-180" /></Button>
+            <Tooltip.Content>{t('ui.jumpBottom')}</Tooltip.Content>
+          </Tooltip>
+        </div>}
+        <div className="composer-shell">
+          {replyMessage && (
+            <div className="composer-reply-inline">
+              <span className="composer-reply-text">{previewText(replyMessage)}</span>
+              <button type="button" className="composer-reply-close" aria-label={t('common.cancel')} onClick={() => setReplyTo(null)}><Icon name="close" size={14} /></button>
+            </div>
+          )}
+          <TextField className="w-full" value={text} onChange={value => setDrafts(current => ({ ...current, [bot.id]: value }))} aria-label={t('ui.messageTo', { name: bot.name })}>
+            <TextArea
+              ref={composerRef}
+              rows={2}
+              className="composer-input max-h-56 w-full resize-none"
+              placeholder={t(replyMessage ? 'message.replyPlaceholder' : 'message.composerEmpty')}
+              aria-describedby="chat-send-hint"
+              onCompositionStart={() => { composingRef.current = true; }}
+              onCompositionEnd={() => { composingRef.current = false; }}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey && !composingRef.current
+                  && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
+          </TextField>
+          <div className="composer-actions">
+            <Dropdown>
+              <Button isIconOnly size="sm" variant="ghost" className="rounded-full" aria-label={t('ui.addTools')}><Icon name="plus" size={20} /></Button>
+              <Dropdown.Popover placement="top start">
+                <Dropdown.Menu aria-label={t('ui.addTools')} onAction={key => {
+                  if (key === 'settings') onOpenSettings();
+                  if (key === 'computers') onOpenComputers();
+                }}>
+                  <Dropdown.Item id="settings" textValue={t('bot.settings')}><Icon name="settings" size={18} /><span>{t('bot.settings')}</span></Dropdown.Item>
+                  <Dropdown.Item id="computers" textValue={t('bot.computers')}><Icon name="monitor" size={18} /><span>{t('bot.computers')}</span></Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {modelChoices.length ? (
+                <Dropdown>
+                  <Button size="sm" variant="ghost" className="composer-model" aria-label={t('bot.model')}>
+                    <span className="max-w-36 truncate">{activeChoice?.label ?? activeModel ?? t('bot.chooseModel')}</span>
+                    <Icon name="chevron" size={13} className="rotate-90 opacity-60" />
+                  </Button>
+                  <Dropdown.Popover placement="top end">
+                    <Dropdown.Menu aria-label={t('bot.model')} onAction={key => void chooseModel(String(key))}>
+                      {defaultChoice && <Dropdown.Item id="default" textValue={`${t('bot.followDefault')} ${defaultChoice.label}`}>
+                        <Icon name="sparkles" size={15} /><span className="truncate">{t('bot.followDefault')} · {defaultChoice.label}</span>
+                        {!bot.provider && !bot.model && <Icon name="check" size={14} className="ml-auto" />}
+                      </Dropdown.Item>}
+                      {modelChoices.map(choice => <Dropdown.Item key={choice.key} id={choice.key} textValue={`${choice.providerName} ${choice.label}`}>
+                        <span className="truncate">{choice.providerName} · {choice.label}</span>
+                        {choice.key === activeChoice?.key && bot.model === choice.model && <Icon name="check" size={14} className="ml-auto" />}
+                      </Dropdown.Item>)}
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown>
+              ) : (
+                <Button size="sm" variant="ghost" className="composer-model" onPress={() => navigate('/settings/providers')}>{t('bot.configureModel')}</Button>
+              )}
+              <Tooltip>
+                <Button isIconOnly size="sm" variant="primary" className="size-9 rounded-full" isDisabled={sendDisabled} onPress={() => void send()} aria-label={sending ? t('message.sending') : text.trim() ? t('message.send') : t('message.composerEmpty')}>
+                  {sending ? <Spinner size="sm" /> : <Icon name="arrowUp" size={18} />}
+                </Button>
+                <Tooltip.Content>{sending ? t('message.sending') : busy || (text.trim() ? t('message.send') : t('message.composerEmpty'))}</Tooltip.Content>
+              </Tooltip>
+            </div>
+          </div>
+        </div>
+        <p id="chat-send-hint" className="sr-only">{t('message.composer', { name: bot.name })}</p>
+      </div>
+
+      {menu && createPortal(
+        <div
+          ref={menuRef}
+          className="message-menu"
+          role="menu"
+          style={{
+            left: Math.max(8, Math.min(menu.x, window.innerWidth - 268)),
+            top: Math.max(8, Math.min(menu.y, window.innerHeight - (menu.message.sender === bot.id ? 310 : 210))),
+          }}
+        >
+          {menu.message.sender === bot.id && (
+            <div className="message-menu-emojis">
+              {QUICK_REACTIONS.map(emoji => (
+                <button key={emoji} type="button" className="message-menu-emoji" onClick={() => void toggleReaction(menu.message, emoji)}>{emoji}</button>
+              ))}
+              <button type="button" className="message-menu-emoji message-menu-more" aria-label={t('message.emojiTitle')} onClick={() => { setEmojiTarget(menu.message); setMenu(null); }}><Icon name="smile" size={17} /></button>
+            </div>
+          )}
+          <button type="button" className="message-menu-action" role="menuitem" onClick={() => startReply(menu.message)}><Icon name="reply" size={17} />{t('message.reply')}</button>
+          <button type="button" className="message-menu-action" role="menuitem" onClick={() => { void copyText(menu.message.text); setMenu(null); }}><Icon name="copy" size={17} />{t('message.copy')}</button>
+          <button type="button" className="message-menu-action" role="menuitem" onClick={() => { void copyText(menu.message.id); setMenu(null); }}><Icon name="copy" size={17} />{t('message.copyRequestId')}</button>
+        </div>,
+        document.body,
+      )}
+      <EmojiPicker isOpen={!!emojiTarget} onOpenChange={open => { if (!open) setEmojiTarget(null); }} onPick={emoji => { if (emojiTarget) void toggleReaction(emojiTarget, emoji); }} />
+      <BotThreadDialog bot={bot} peer={threadPeer} isOpen={!!threadPeer} onOpenChange={open => { if (!open) setThreadPeer(null); }} />
+    </section>
+  );
+}
