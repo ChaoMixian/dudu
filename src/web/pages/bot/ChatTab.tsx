@@ -367,7 +367,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTa
         )}
       </div>
 
-      <div className="relative mx-auto w-full max-w-4xl shrink-0 px-4 pb-5 md:px-8" aria-busy={sending}>
+      <div className="chat-composer relative mx-auto w-full max-w-4xl shrink-0 px-4 md:px-8" aria-busy={sending}>
         {showJump && <div className="absolute inset-x-0 bottom-full flex justify-center pb-3">
           <Tooltip>
             <Button isIconOnly size="sm" variant="secondary" className="rounded-full" onPress={jumpToBottom} aria-label={t('ui.jumpBottom')}><Icon name="arrowUp" size={16} className="rotate-180" /></Button>

@@ -21,6 +21,10 @@ export function applyTheme(mode: ThemeMode): 'light' | 'dark' {
   document.documentElement.classList.toggle('dark', resolved === 'dark');
   document.documentElement.classList.toggle('light', resolved === 'light');
   document.documentElement.style.colorScheme = resolved;
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.setAttribute('content', resolved === 'dark' ? '#0E1012' : '#F6F4F1');
+  const statusBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (statusBar) statusBar.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
   return resolved;
 }
 

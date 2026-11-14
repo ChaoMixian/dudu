@@ -28,7 +28,7 @@ export class BotdSupervisor {
   private locked = false;
   private closing = false;
   constructor(options: BotdOptions = {}) { this.options = options; this.root = resolve(options.root ?? DEFAULT_ROOT); this.host = options.host ?? '127.0.0.1'; this.port = options.port ?? 7332; }
-  init() { return this.initialized ??= this.initialize(); }
+  init() { return this.initialized ??= this.initialize().catch(error => { this.initialized = undefined; throw error; }); }
   private async initialize() {
     if (process.platform !== 'linux' || process.getuid?.() === undefined) throw new BotdError('botd requires Linux and same-UID process isolation');
     await mkdir(this.root, { recursive: true, mode: 0o700 }); await chmod(this.root, 0o700);

@@ -1,0 +1,20 @@
+{
+  "name": "dudu",
+  "short_name": "dudu",
+  "description": "A local-first runtime for Bots with persistent identity, memory, and a dedicated Linux desktop per Bot.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "any",
+  "background_color": "#0E1012",
+  "theme_color": "#0E1012",
+  "categories": ["productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

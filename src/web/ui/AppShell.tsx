@@ -6,6 +6,7 @@ import { request, segment } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { useLive } from '../state/LiveContext';
 import { useI18n } from '../i18n';
+import { hardReload, useBuildInfo } from '../lib/build-info';
 import BotAvatar from './BotAvatar';
 import BrandMark from './BrandMark';
 import Icon, { type IconName } from './Icon';
@@ -21,6 +22,7 @@ function readPins(): string[] {
 
 export default function AppShell() {
   const { state, loaded, liveError, live, refresh, toasts, run } = useLive();
+  const { updateAvailable, latest } = useBuildInfo();
   const { authRequired, logout, token } = useAuth();
   const { t, locale, setLocale } = useI18n();
   const navigate = useNavigate();
@@ -272,6 +274,10 @@ export default function AppShell() {
           <IconButton label={t('ui.openSidebar')} onPress={() => setMobileOpen(true)}><Icon name="sidebar" /></IconButton>
           <BrandMark size={20} />
           <span className="mobile-brand">dudu</span>
+        </div>}
+        {updateAvailable && <div className="build-update-banner" role="status">
+          <span>{t('about.updateAvailable', { build: latest?.build ?? '' })}</span>
+          <Button size="sm" variant="secondary" className="rounded-full" onPress={hardReload}>{t('about.reload')}</Button>
         </div>}
         {(liveError || refreshError) && <div className="px-4 pt-3"><Alert status="warning"><Alert.Content><Alert.Description>{refreshError || t('status.liveUnavailable')}</Alert.Description></Alert.Content><Button size="sm" variant="ghost" isPending={refreshing} onPress={() => void refreshState()}>{t('status.refresh')}</Button></Alert></div>}
         <div className="app-content">{loaded ? <Outlet /> : <div className="flex h-full items-center justify-center"><Spinner size="sm" /></div>}</div>

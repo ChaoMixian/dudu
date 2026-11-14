@@ -25,12 +25,13 @@ app.bindServer(server);
 console.log(`dudu dev http://${server.hostname}:${server.port} workspace=${app.config.root}`);
 let closing = false;
 async function close() {
-  if (closing) return;
+  if (closing) { process.exit(1); return; }
   closing = true;
   build.kill();
   server.stop(true);
-  await app.close();
-  process.exit(0);
+  const force = setTimeout(() => process.exit(1), 10000);
+  force.unref();
+  try { await app.close(); } finally { clearTimeout(force); process.exit(0); }
 }
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void close());
 void build.exited.then(code => {

@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Plug, Server, Sun } from 'lucide-react';
+import { Info, Plug, Server, Sun } from 'lucide-react';
 import { useI18n } from '../i18n';
 import useUnsavedChanges from '../ui/useUnsavedChanges';
+import AboutPage from './AboutPage';
 import AppearancePage from './AppearancePage';
 import ConnectorsPage from './ConnectorsPage';
 import ProvidersPage from './ProvidersPage';
 
 export default function SettingsPage() {
   const { tab = 'providers' } = useParams();
-  if (!['providers', 'connectors', 'appearance'].includes(tab)) return <Navigate to="/settings/providers" replace />;
+  if (!['providers', 'connectors', 'appearance', 'about'].includes(tab)) return <Navigate to="/settings/providers" replace />;
   return <SettingsContent key={tab} tab={tab} />;
 }
 
@@ -36,12 +37,16 @@ function SettingsContent({ tab }: { tab: string }) {
               <button type="button" className="settings-link" data-active={tab === 'appearance' ? 'true' : undefined} aria-current={tab === 'appearance' ? 'page' : undefined} onClick={() => go('appearance')} disabled={pending}>
                 <Sun size={17} aria-hidden="true" /><span>{t('appearance.title')}</span>
               </button>
+              <button type="button" className="settings-link" data-active={tab === 'about' ? 'true' : undefined} aria-current={tab === 'about' ? 'page' : undefined} onClick={() => go('about')} disabled={pending}>
+                <Info size={17} aria-hidden="true" /><span>{t('about.title')}</span>
+              </button>
             </nav>
           </aside>
           <div className="min-w-0 flex-1">
             {tab === 'providers' && <ProvidersPage onDirtyChange={setDirty} onPendingChange={setPending} />}
             {tab === 'connectors' && <ConnectorsPage onDirtyChange={setDirty} onPendingChange={setPending} />}
             {tab === 'appearance' && <AppearancePage />}
+            {tab === 'about' && <AboutPage />}
           </div>
         </div>
       </div>

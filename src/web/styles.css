@@ -112,6 +112,7 @@ body {
 
 .app-shell {
   display: flex;
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   background: var(--background);
@@ -1439,6 +1440,10 @@ button.message-reaction {
   color: var(--foreground);
 }
 
+.chat-composer {
+  padding-bottom: 20px;
+}
+
 .composer-shell {
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -1863,4 +1868,73 @@ button.message-reaction {
     border-radius: 20px;
     padding: 24px 20px 20px;
   }
+}
+
+/* ---------- Installed app (iOS / PWA) ---------- */
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+@media (display-mode: standalone) {
+  .app-shell {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: 0;
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .login-page {
+    padding:
+      max(32px, env(safe-area-inset-top))
+      max(20px, env(safe-area-inset-right))
+      max(32px, env(safe-area-inset-bottom))
+      max(20px, env(safe-area-inset-left));
+  }
+
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+@media (display-mode: standalone) {
+  .chat-composer {
+    padding-bottom: 0;
+  }
+
+  .modal__container,
+  [data-slot="modal-container"],
+  .alert-dialog__container,
+  [data-slot="alert-dialog-container"] {
+    padding-top: max(16px, env(safe-area-inset-top));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(16px, min(24px, env(safe-area-inset-bottom)));
+    padding-left: max(16px, env(safe-area-inset-left));
+  }
+
+  .toast-stack {
+    bottom: max(16px, min(24px, env(safe-area-inset-bottom)));
+  }
+}
+
+.build-update-banner {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--separator);
+  background: var(--accent-soft);
+  color: var(--accent-soft-foreground);
+  font-size: 12.5px;
 }

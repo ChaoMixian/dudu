@@ -8,6 +8,22 @@ import { ensureBuiltinConnectors } from './connectors/builtin';
 import { SourceManager } from './sources';
 import { Computer } from './core/computer';
 import { eventInput, id, object, text, type DuduEvent, type ProviderConfig } from './contracts';
+const STATIC_TYPES: Record<string,string> = {
+  html:'text/html; charset=utf-8', htm:'text/html; charset=utf-8',
+  js:'text/javascript; charset=utf-8', mjs:'text/javascript; charset=utf-8',
+  css:'text/css; charset=utf-8', json:'application/json', map:'application/json',
+  webmanifest:'application/manifest+json', xml:'application/xml',
+  svg:'image/svg+xml', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
+  webp:'image/webp', gif:'image/gif', ico:'image/x-icon',
+  woff:'font/woff', woff2:'font/woff2', ttf:'font/ttf', otf:'font/otf',
+  txt:'text/plain; charset=utf-8', wasm:'application/wasm', pdf:'application/pdf',
+  mp4:'video/mp4', webm:'video/webm', mkv:'video/x-matroska',
+};
+const staticType = (name: string) => STATIC_TYPES[name.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
+const staticHeaders = (name: string) => ({
+  'content-type': staticType(name),
+  ...(/(?:^|\/)(?:build\.json|index\.html|manifest\.webmanifest)$/.test(name) ? { 'cache-control': 'no-store' } : {}),
+});
 function generatedBotId(name:string, taken:Set<string>) {
   const base=name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48)||'bot';
   let candidate='';
@@ -103,13 +119,13 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
       if(path==='/api/providers'&&req.method==='PUT'){const v=await data();if(!Array.isArray(v.providers))throw new Error('providers must be an array');const providers=v.providers as ProviderConfig[];for(const p of providers){id(p.id);new URL(p.baseUrl);if(!['openai-completions','openai-responses','anthropic-messages'].includes(p.api))throw new Error('Unsupported provider API');if(p.apiKey!==undefined&&typeof p.apiKey!=='string')throw new Error('apiKey must be a string');if(p.name!==undefined&&(typeof p.name!=='string'||p.name.length>160))throw new Error('Invalid provider name');if(!Array.isArray(p.models)||!p.models.length)throw new Error('Provider requires models');for(const m of p.models){text(m.id);if(m.name!==undefined)text(m.name);m.name??=m.id;}}
         const previous=config.global();const next={...previous,providers};if(next.defaultProvider){const selected=providers.find(p=>p.id===next.defaultProvider);if(!selected||!next.defaultModel||!selected.models.some(m=>m.id===next.defaultModel)){delete next.defaultProvider;delete next.defaultModel;}}
         config.setGlobal(next);for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'providers'});return json({providers,defaults:{provider:next.defaultProvider,model:next.defaultModel}});}
-      if(parts[1]==='artifacts'&&parts.length===4){const name=parts[3];if(!/^[\w.-]+$/.test(name))throw new Error('Invalid artifact name');const file=Bun.file(join(config.botPath(id(parts[2])),'artifacts',name));if(!await file.exists())return json({error:'Not found'},404);return new Response(file);}
+      if(parts[1]==='artifacts'&&parts.length===4){const name=parts[3];if(!/^[\w.-]+$/.test(name))throw new Error('Invalid artifact name');const file=Bun.file(join(config.botPath(id(parts[2])),'artifacts',name));if(!await file.exists())return json({error:'Not found'},404);return new Response(file,{headers:{'content-type':file.type||staticType(name)}});}
       return json({error:'Not found'},404);
     }
     const relative=path==='/'?'index.html':decodeURIComponent(path).replace(/^\//,'');
     // Compiled binaries embed the UI; source runs serve the dist directory.
-    if(options.assets){const embedded=options.assets[`/${relative}`]??options.assets['/index.html'];if(!embedded)return new Response('Build UI first: bun run build',{status:503});return new Response(Bun.file(embedded));}
-    const dist=resolve(import.meta.dir,'../dist');let filePath=resolve(dist,relative);if(!filePath.startsWith(dist+'/'))return json({error:'Invalid path'},400);let file=Bun.file(filePath);if(!await file.exists())file=Bun.file(join(dist,'index.html'));if(!await file.exists())return new Response('Build UI first: npm run build',{status:503});return new Response(file);
+    if(options.assets){const key=options.assets[`/${relative}`]?`/${relative}`:'/index.html';const embedded=options.assets[key];if(!embedded)return new Response('Build UI first: bun run build',{status:503});return new Response(Bun.file(embedded),{headers:staticHeaders(key)});}
+    const dist=resolve(import.meta.dir,'../dist');let filePath=resolve(dist,relative);if(!filePath.startsWith(dist+'/'))return json({error:'Invalid path'},400);let file=Bun.file(filePath);if(!await file.exists()){filePath=join(dist,'index.html');file=Bun.file(filePath);}if(!await file.exists())return new Response('Build UI first: npm run build',{status:503});return new Response(file,{headers:staticHeaders(filePath)});
   }catch(error){return json({error:error instanceof Error?error.message:String(error)},400);} }
   // Echo the request origin so the LAN-facing dev UI (vite on 0.0.0.0) can call the API from any host address.
   async function fetchRequest(req:Request):Promise<Response> { const origin=req.headers.get('origin');const response=await handle(req);if(!response)return response as unknown as Response;if(origin)response.headers.set('access-control-allow-origin',origin);return response; }
@@ -123,7 +139,13 @@ export function startServer(options: StartOptions = {}) {
   const c=app.config.global();
   const server=Bun.serve({hostname:options.host??process.env.DUDU_HOST??c.host,port:options.port??Number(process.env.DUDU_PORT??c.port),idleTimeout:0,fetch:app.fetch,websocket:app.websocket as any});
   app.bindServer(server);console.log(`dudu http://${server.hostname}:${server.port} workspace=${app.config.root}`);
-  let closing=false;for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,async()=>{if(closing)return;closing=true;server.stop(true);await app.close();process.exit(0);});
+  let closing=false;for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{
+    if(closing){process.exit(1);return;}
+    closing=true;server.stop(true);
+    // A stuck agent or desktop cleanup must not leave an orphan server holding the workspace lock.
+    const force=setTimeout(()=>process.exit(1),10000);force.unref();
+    void app.close().finally(()=>{clearTimeout(force);process.exit(0);});
+  });
   return {app,server};
 }
 if(import.meta.main) startServer();

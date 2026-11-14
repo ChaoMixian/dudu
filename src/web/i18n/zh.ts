@@ -29,10 +29,17 @@ export const zh = {
     nameRequired: '请输入 Bot 名称。', modelRequired: '请选择提供商和模型。', bindingsJson: '绑定配置必须是有效的 JSON 数组：{error}',
     saving: '正在保存…', saveFailed: '保存失败，请检查错误提示后重试。',
   },
-  nav: { overview: '总览', connectors: '连接器', sources: '事件源', providers: '模型服务', computers: '电脑', settings: '设置', newBot: '新建', language: '语言', appearance: '外观' },
+  nav: { overview: '总览', connectors: '连接器', sources: '事件源', providers: '模型服务', computers: '电脑', settings: '设置', newBot: '新建', language: '语言', appearance: '外观', about: '关于' },
   appearance: {
     title: '外观', desc: '选择界面主题。跟随系统会随设备的深浅色设置自动切换。',
     light: '浅色', dark: '深色', system: '跟随系统', systemHint: '默认使用系统外观。',
+  },
+  about: {
+    title: '关于', desc: '当前加载的版本与构建信息。',
+    version: '版本', build: '构建号', commit: '提交', builtAt: '构建时间',
+    checking: '检查中…', check: '检查更新', upToDate: '当前页面已是最新构建。',
+    updateAvailable: '有新版本可用（{build}）', cacheHint: '服务端已有新构建。如果持续不一致，请删除主屏幕图标后重新添加。',
+    reload: '重新加载', unavailable: '无法读取服务端构建信息。',
   },
   avatar: {
     title: '头像', hint: '从随机生成的头像中选择一个。', refresh: '换一批', option: '选择头像', color: '主题色',

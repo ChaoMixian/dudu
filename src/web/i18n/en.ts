@@ -31,10 +31,17 @@ export const en: Dictionary = {
     nameRequired: 'Enter a bot name.', modelRequired: 'Select a provider and model.', bindingsJson: 'Bindings must be a valid JSON array: {error}',
     saving: 'Saving…', saveFailed: 'Save failed. Check the error and try again.',
   },
-  nav: { overview: 'Overview', connectors: 'Connectors', sources: 'Event sources', providers: 'Models', computers: 'Computers', settings: 'Settings', newBot: 'New', language: 'Language', appearance: 'Appearance' },
+  nav: { overview: 'Overview', connectors: 'Connectors', sources: 'Event sources', providers: 'Models', computers: 'Computers', settings: 'Settings', newBot: 'New', language: 'Language', appearance: 'Appearance', about: 'About' },
   appearance: {
     title: 'Appearance', desc: 'Choose a theme. System follows your device setting automatically.',
     light: 'Light', dark: 'Dark', system: 'System', systemHint: 'System appearance is the default.',
+  },
+  about: {
+    title: 'About', desc: 'Version and build loaded in this page.',
+    version: 'Version', build: 'Build', commit: 'Commit', builtAt: 'Built at',
+    checking: 'Checking…', check: 'Check for updates', upToDate: 'This page is up to date.',
+    updateAvailable: 'A new build is available ({build})', cacheHint: 'The server has a newer build. If this persists, remove the Home Screen icon and add it again.',
+    reload: 'Reload', unavailable: 'Cannot read the server build info.',
   },
   avatar: {
     title: 'Avatar', hint: 'Choose from freshly generated avatars.', refresh: 'Shuffle', option: 'Choose avatar', color: 'Theme color',
