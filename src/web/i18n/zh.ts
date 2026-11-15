@@ -10,7 +10,7 @@ export const zh = {
     startChat: '向 {name} 发送消息，开始聊天。', jumpBottom: '回到最新消息',
   },
   ui2: {
-    otherBots: '其他机器人', recentChats: '最近对话', workspace: '工作区', workspaceMenu: '工作区选项', localWorkspace: '本地工作区', lightMode: '切换浅色', darkMode: '切换深色',
+    otherBots: '其他机器人', recentChats: '最近对话', workspace: '工作区', lightMode: '切换浅色', darkMode: '切换深色',
     loading: '正在连接工作区…', loadFailed: '工作区加载失败', welcomeBack: '让想法开始运转。', welcomeNote: '选择一个机器人，继续对话、交付任务，或查看工作进展。',
     workspaceReady: '工作区已就绪', activeBots: '{n} 个机器人正在工作', browseBots: '你的机器人', setup: '开始搭建你的工作区',
     setupNote: '先配置模型服务，再创建机器人。消息、自动化与电脑操作都从这里开始。',

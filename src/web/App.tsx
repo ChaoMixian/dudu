@@ -59,14 +59,10 @@ export default function App() {
     <Routes>
       <Route element={<Guard><AppShell /></Guard>}>
         <Route path="/" element={<Welcome />} />
-        <Route path="/bots/new" element={<Navigate to="/" replace />} />
         <Route path="/bots/:botId" element={<BotPage />} />
-        <Route path="/settings" element={<Navigate to="/settings/providers" replace />} />
+        <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
         <Route path="/settings/:tab" element={<SettingsPage />} />
         <Route path="/automations" element={<AutomationsPage />} />
-        <Route path="/connectors" element={<Navigate to="/settings/connectors" replace />} />
-        <Route path="/sources" element={<Navigate to="/automations" replace />} />
-        <Route path="/providers" element={<Navigate to="/settings/providers" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

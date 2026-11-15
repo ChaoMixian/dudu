@@ -12,7 +12,7 @@ export const en: Dictionary = {
     startChat: 'Send a message to {name} to start chatting.', jumpBottom: 'Jump to latest message',
   },
   ui2: {
-    otherBots: 'Other bots', recentChats: 'Recent conversations', workspace: 'Workspace', workspaceMenu: 'Workspace options', localWorkspace: 'Local workspace', lightMode: 'Switch to light', darkMode: 'Switch to dark',
+    otherBots: 'Other bots', recentChats: 'Recent conversations', workspace: 'Workspace', lightMode: 'Switch to light', darkMode: 'Switch to dark',
     loading: 'Connecting to your workspace…', loadFailed: 'Could not load workspace', welcomeBack: 'Set your ideas in motion.', welcomeNote: 'Choose a bot to continue a conversation, hand off a task, or check progress.',
     workspaceReady: 'Your workspace is ready', activeBots: '{n} bots at work', browseBots: 'Your bots', setup: 'Build your workspace',
     setupNote: 'Configure a model provider, then create a bot. Messages, automations, and computer actions start here.',

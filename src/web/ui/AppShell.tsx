@@ -41,6 +41,9 @@ export default function AppShell() {
   const [deletingBot, setDeletingBot] = useState<BotConfig | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const activeBot = /^\/bots\/([^/]+)/.exec(location.pathname)?.[1];
+  const profile = state.profile ?? {};
+  const displayName = profile.name?.trim() || t('profile.defaultName');
+  const profileInitial = Array.from(displayName)[0]?.toUpperCase() ?? '?';
   const normalizedQuery = query.trim().toLocaleLowerCase();
 
   const lastMessage = (botId: string, matchQuery = false) => {
@@ -191,28 +194,30 @@ export default function AppShell() {
         <button type="button" className="side-nav-item" data-active={location.pathname.startsWith('/automations') ? 'true' : undefined} aria-current={location.pathname.startsWith('/automations') ? 'page' : undefined} onClick={() => navigate('/automations')}>
           <Icon name="clock" size={19} /><span>{t('ui.automations')}</span>
         </button>
-        <button type="button" className="side-nav-item" data-active={location.pathname.startsWith('/settings') ? 'true' : undefined} aria-current={location.pathname.startsWith('/settings') ? 'page' : undefined} onClick={() => navigate('/settings/providers')}>
+        <button type="button" className="side-nav-item" data-active={location.pathname.startsWith('/settings') ? 'true' : undefined} aria-current={location.pathname.startsWith('/settings') ? 'page' : undefined} onClick={() => navigate('/settings/profile')}>
           <Icon name="settings" size={19} /><span>{t('nav.settings')}</span>
         </button>
       </nav>
       <div className="panel-bottom">
         <Dropdown>
-          <Button variant="ghost" className="profile-card" aria-label={t('ui2.workspaceMenu')}>
-            <span className="profile-avatar" aria-hidden="true">D</span>
+          <Button variant="ghost" className="profile-card" aria-label={t('profile.menu')}>
+            <span className="profile-avatar" aria-hidden="true">
+              {profile.avatar ? <img className="profile-avatar-image" src={profile.avatar} alt="" /> : profileInitial}
+            </span>
             <span className="profile-copy">
-              <span className="profile-title">{t('ui2.localWorkspace')}</span>
+              <span className="profile-title" title={displayName}>{displayName}</span>
               <span className="profile-meta"><span className={`live-dot ${live}`} />{live === 'live' ? t('status.live') : live === 'connecting' ? t('status.connecting') : t('status.reconnecting')}</span>
             </span>
             <Icon name="chevron" size={15} className="-rotate-90 text-muted" />
           </Button>
-          <Dropdown.Popover placement="top start"><Dropdown.Menu aria-label={t('ui2.workspaceMenu')} onAction={key => {
-            if (key === 'settings') navigate('/settings/providers');
+          <Dropdown.Popover placement="top start"><Dropdown.Menu aria-label={t('profile.menu')} onAction={key => {
+            if (key === 'profile') navigate('/settings/profile');
             if (key === 'appearance') navigate('/settings/appearance');
             if (key === 'language') setLocale(locale === 'zh' ? 'en' : 'zh');
             if (key === 'refresh') void refreshState();
             if (key === 'logout') logout();
           }}>
-            <Dropdown.Item id="settings" textValue={t('nav.settings')}><Icon name="settings" size={17} />{t('nav.settings')}</Dropdown.Item>
+            <Dropdown.Item id="profile" textValue={t('profile.title')}><Icon name="user" size={17} />{t('profile.title')}</Dropdown.Item>
             <Dropdown.Item id="appearance" textValue={t('nav.appearance')}><Icon name="sun" size={17} />{t('nav.appearance')}</Dropdown.Item>
             <Dropdown.Item id="language" textValue={t('nav.language')}><Icon name="globe" size={17} />{locale === 'zh' ? 'English' : '简体中文'}</Dropdown.Item>
             <Dropdown.Item id="refresh" isDisabled={refreshing} textValue={t('status.refresh')}><Icon name="refresh" size={17} />{t('status.refresh')}</Dropdown.Item>
@@ -257,7 +262,7 @@ export default function AppShell() {
               <span className="rail-divider" aria-hidden="true" />
               {railItem(t('ui.automations'), 'clock', location.pathname.startsWith('/automations'), () => navigate('/automations'))}
               {railItem(t('nav.connectors'), 'plug', location.pathname === '/settings/connectors', () => navigate('/settings/connectors'))}
-              {railItem(t('nav.settings'), 'settings', location.pathname.startsWith('/settings') && location.pathname !== '/settings/connectors', () => navigate('/settings/providers'))}
+              {railItem(t('nav.settings'), 'settings', location.pathname.startsWith('/settings') && location.pathname !== '/settings/connectors', () => navigate('/settings/profile'))}
             </div>
           )}
         </aside>

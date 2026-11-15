@@ -11,7 +11,8 @@ export type InboxStatus = 'pending' | 'delivering' | 'completed' | 'failed' | 'c
 export interface ComputerConfig { desktopId?: string; width?: number; height?: number; watchUrl?: string }
 export interface BotConfig { id: string; name: string; description: string; avatar?: string; color?: string; provider?: string; model?: string; thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; paused: boolean; computer: ComputerConfig }
 export interface ProviderConfig { id: string; name?: string; baseUrl: string; api: 'openai-completions' | 'openai-responses' | 'anthropic-messages'; apiKey?: string; models: { id: string; name: string; reasoning?: boolean; contextWindow?: number; maxTokens?: number }[] }
-export interface GlobalConfig { host: string; port: number; token?: string; providers: ProviderConfig[]; defaultProvider?: string; defaultModel?: string; autoStartComputers?: boolean }
+export interface UserProfile { name?: string; avatar?: string; avatarStyle?: string; avatarPreset?: string }
+export interface GlobalConfig { host: string; port: number; token?: string; providers: ProviderConfig[]; defaultProvider?: string; defaultModel?: string; autoStartComputers?: boolean; profile?: UserProfile }
 export interface ConnectorTool { name: string; description: string; parameters: Record<string, unknown> }
 export interface ConnectorDefinition { id: string; name: string; description: string; transport: 'command' | 'mcp' | 'http'; argv?: string[]; url?: string; env?: Record<string,string>; tools: ConnectorTool[] }
 export interface SourceConfig { id: string; botId: string; kind: 'once' | 'interval' | 'cron' | 'process' | 'webhook'; enabled: boolean; priority: Priority; payload: unknown; at?: string; intervalMs?: number; cron?: string; argv?: string[]; env?: Record<string, string>; type?: string; timezone?: string }

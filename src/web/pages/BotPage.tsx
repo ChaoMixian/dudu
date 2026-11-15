@@ -6,6 +6,7 @@ import { useI18n } from '../i18n';
 import { segment } from '../lib/api';
 import Icon from '../ui/Icon';
 import IconButton from '../ui/IconButton';
+import { openCreateBot } from '../ui/CreateBotDialog';
 import DiscardChangesDialog from '../ui/DiscardChangesDialog';
 import BotAvatar from '../ui/BotAvatar';
 import useUnsavedChanges from '../ui/useUnsavedChanges';
@@ -89,7 +90,7 @@ export default function BotPage() {
           {context && <p className="truncate text-xs text-muted" title={context}>{context}</p>}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <IconButton label={t('ui.newChat')} onPress={() => navigate('/bots/new')}><Icon name="plus" size={19} /></IconButton>
+          <IconButton label={t('ui.newChat')} onPress={openCreateBot}><Icon name="plus" size={19} /></IconButton>
           <IconButton label={t('bot.computers')} onPress={() => openPanel('computers')}><Icon name="monitor" size={19} /></IconButton>
           <Dropdown>
             <Button isIconOnly variant="tertiary" aria-label={t('ui.more')} aria-busy={Boolean(actionPending)}>

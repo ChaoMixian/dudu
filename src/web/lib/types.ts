@@ -1,4 +1,4 @@
-import type { BotConfig, BotThread, ConnectorDefinition, DesktopStatus, MessageAttachment, MessageKind, ProviderConfig, SourceConfig } from '../../contracts';
+import type { BotConfig, BotThread, ConnectorDefinition, DesktopStatus, MessageAttachment, MessageKind, ProviderConfig, SourceConfig, UserProfile } from '../../contracts';
 
 export type BotState = 'idle' | 'running' | 'paused' | 'error';
 export type MessageStatus = 'accepted' | 'sent' | 'failed';
@@ -13,6 +13,7 @@ export interface Defaults { provider?: string; model?: string }
 export interface AppState {
   bots: BotConfig[]; connectors: ConnectorDefinition[]; sources: SourceConfig[];
   providers: ProviderConfig[]; defaults: Defaults; autoStartComputers: boolean;
+  profile: UserProfile;
   statuses: BotStatus[]; messages: Message[]; botThreads: BotThread[]; desktops: DesktopStatus[];
 }
-export const EMPTY_STATE: AppState = { bots: [], connectors: [], sources: [], providers: [], defaults: {}, autoStartComputers: true, statuses: [], messages: [], botThreads: [], desktops: [] };
+export const EMPTY_STATE: AppState = { bots: [], connectors: [], sources: [], providers: [], defaults: {}, autoStartComputers: true, profile: {}, statuses: [], messages: [], botThreads: [], desktops: [] };
