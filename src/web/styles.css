@@ -1370,11 +1370,16 @@ button.message-reaction:focus-visible {
   border-radius: 8px;
   font-size: 18px;
   cursor: pointer;
-  transition: background-color 120ms ease;
+  transition: background-color 120ms ease, transform 120ms ease;
 }
 
 .message-menu-emoji:hover {
-  background: var(--surface-hover);
+  background: color-mix(in oklab, var(--foreground) 12%, transparent);
+  transform: scale(1.08);
+}
+
+.message-menu-emoji:active {
+  transform: scale(0.96);
 }
 
 .message-menu-more {
@@ -1434,10 +1439,16 @@ button.message-reaction:focus-visible {
   border-radius: 8px;
   font-size: 22px;
   cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
 }
 
 .emoji-picker-item:hover {
-  background: var(--surface-hover);
+  background: color-mix(in oklab, var(--foreground) 12%, transparent);
+  transform: scale(1.06);
+}
+
+.emoji-picker-item:active {
+  transform: scale(0.96);
 }
 
 @media (prefers-reduced-motion: reduce) {
