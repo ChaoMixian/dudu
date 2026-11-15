@@ -9,9 +9,9 @@ This document is for people who want to run, deploy, or extend dudu. See the [RE
 - Bun (runtime and build)
 - Node.js (Vite build)
 - Linux desktop capabilities (only needed for computer features):
-  - Xvfb, xfce4-session, xfwm4, xauth, xdpyinfo, xprop, xdotool, xclip, dbus-daemon, ffmpeg
+  - Xvfb, xfce4-session, xfwm4, xfce4-panel, xfdesktop, xauth, xdpyinfo, xprop, xdotool, xclip, dbus-daemon, ffmpeg
   - [tembo/voxl](https://github.com/tembo/voxl): `cargo install voxl-server`; needs x264/libyuv/opus/libpulse/esbuild
-  - Optional: xfdesktop, xfce4-panel, xfce4-terminal, thunar
+  - Optional: xfce4-terminal, thunar
 
 dudu never installs system packages and never modifies your default desktop session.
 

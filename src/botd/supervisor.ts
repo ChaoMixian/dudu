@@ -5,8 +5,43 @@ import { join, resolve, dirname, sep, isAbsolute } from 'node:path';
 import { id as validId } from '../contracts';
 import { BotdError, DEFAULT_ROOT, type BotdOptions, type DesktopConfig, type DesktopStatus, type SavedDesktop, type ProcessRecord, type ExecOptions, type ExecResult, type WatchInfo, type RecordingInfo } from './types';
 
-const BINARIES = ['Xvfb','xfce4-session','xfwm4','xauth','xdpyinfo','xprop','xdotool','xclip','ffmpeg','dbus-daemon','voxl'] as const;
+const BINARIES = ['Xvfb','xfce4-session','xfwm4','xfce4-panel','xfdesktop','xauth','xdpyinfo','xprop','xdotool','xclip','ffmpeg','dbus-daemon','voxl'] as const;
 const PNG = Buffer.from([137,80,78,71,13,10,26,10]);
+// xfce4-session starts ssh/gpg agents itself. GnuPG keeps its agent socket in
+// /run/user/<uid>, so that startup step talks to the host's agent and blocks
+// the whole session when that agent is busy.
+// The Failsafe list drops Thunar (it daemonizes without reporting startup
+// completion) and starts the panel and desktop in one group.
+const SESSION_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-session" version="1.0">
+  <property name="startup" type="empty">
+    <property name="gpg-agent" type="empty">
+      <property name="enabled" type="bool" value="false"/>
+    </property>
+    <property name="ssh-agent" type="empty">
+      <property name="enabled" type="bool" value="false"/>
+    </property>
+  </property>
+  <property name="sessions" type="empty">
+    <property name="Failsafe" type="empty">
+      <property name="IsFailsafe" type="bool" value="true"/>
+      <property name="Count" type="int" value="4"/>
+      <property name="Client0_Command" type="array"><value type="string" value="xfwm4"/></property>
+      <property name="Client0_Priority" type="int" value="15"/>
+      <property name="Client0_PerScreen" type="bool" value="false"/>
+      <property name="Client1_Command" type="array"><value type="string" value="xfsettingsd"/></property>
+      <property name="Client1_Priority" type="int" value="20"/>
+      <property name="Client1_PerScreen" type="bool" value="false"/>
+      <property name="Client2_Command" type="array"><value type="string" value="xfce4-panel"/></property>
+      <property name="Client2_Priority" type="int" value="25"/>
+      <property name="Client2_PerScreen" type="bool" value="false"/>
+      <property name="Client3_Command" type="array"><value type="string" value="xfdesktop"/></property>
+      <property name="Client3_Priority" type="int" value="25"/>
+      <property name="Client3_PerScreen" type="bool" value="false"/>
+    </property>
+  </property>
+</channel>
+`;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 function alive(pid: number) { try { process.kill(pid, 0); return true; } catch { return false; } }
 async function ticks(pid: number): Promise<string> { try { const s = await readFile(`/proc/${pid}/stat`, 'utf8'); return s.slice(s.lastIndexOf(')') + 2).split(' ')[19] ?? ''; } catch { return ''; } }
@@ -113,6 +148,11 @@ export class BotdSupervisor {
     if (!match || match[0] === '0x0') return false;
     return /xfwm/i.test(await this.check(d,['xprop','-id',match[0],'_NET_WM_NAME']));
   }
+  /** A mapped window with this WM_CLASS exists on the desktop's display. */
+  private async mapped(d: SavedDesktop, cls: string): Promise<boolean> {
+    const r = await this.command(d,['xdotool','search','--onlyvisible','--class',cls],3000);
+    return r.code === 0 && r.stdout.trim().length > 0;
+  }
   private async waitFor(fn: () => Promise<boolean>, d: SavedDesktop, what: string) {
     const end = Date.now() + (this.options.startupTimeoutMs ?? 30000); let error: unknown;
     while (Date.now() < end) {
@@ -180,17 +220,16 @@ export class BotdSupervisor {
         await writeFile(busConfig,`<busconfig><type>session</type><listen>unix:path=${join(dir,'run/bus').replaceAll('&','&amp;').replaceAll('<','&lt;')}</listen><auth>EXTERNAL</auth><servicedir>/usr/share/dbus-1/services</servicedir><policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy></busconfig>`,{mode:0o600});
         await this.launch(d,['dbus-daemon',`--config-file=${busConfig}`,'--nofork','--nopidfile'],'dbus');
         await this.waitFor(async () => lstat(join(dir,'run/bus')).then(s => s.isSocket()).catch(() => false),d,'private D-Bus');
+        // Seed the channel once: xfce4-session only writes it when a session is
+        // saved, and the agent startup it disables is never wanted here.
+        const channel = join(dir,'home/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml');
+        if (!await Bun.file(channel).exists()) { await mkdir(dirname(channel),{recursive:true,mode:0o700}); await writeFile(channel,SESSION_XML,{mode:0o600}); }
         await this.launch(d,['xfce4-session','--disable-tcp'],'xfce');
-        // Session activation normally starts xfwm4. Some installs do not (for
-        // example when xfsettingsd is absent), so only start it ourselves when
-        // the session has not produced a window manager after a short grace.
-        let managed = false;
-        for (let attempt = 0; attempt < 6 && !managed; attempt++) {
-          if (attempt) await sleep(200);
-          managed = await this.wmPresent(d).catch(() => false);
-        }
-        if (!managed) await this.launch(d,['xfwm4'],'xfwm4');
+        // A desktop is only usable once the window manager, the panel and the
+        // desktop window are up; a WM alone leaves a black screen.
         await this.waitFor(() => this.wmPresent(d),d,'Xfce window manager');
+        await this.waitFor(() => this.mapped(d,'xfce4-panel'),d,'Xfce panel');
+        await this.waitFor(() => this.mapped(d,'xfdesktop'),d,'Xfce desktop');
         // voxl reads DISPLAY for the X session and VOXL_PASSWORD for basic auth.
         await this.launch(d,['voxl','--addr=127.0.0.1',`--port=${d.port}`,'--enable-basic-auth=true'],'voxl',{env:{VOXL_PASSWORD:d.password}});
         await this.waitFor(async () => { const r = await fetch(`http://127.0.0.1:${d.port}/healthz`,{signal:AbortSignal.timeout(2000)}); return r.ok; },d,'voxl health');

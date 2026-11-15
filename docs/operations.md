@@ -9,9 +9,9 @@
 - Bun（运行与构建）
 - Node.js（Vite 构建）
 - Linux 桌面能力（仅电脑功能需要）：
-  - Xvfb、xfce4-session、xfwm4、xauth、xdpyinfo、xprop、xdotool、xclip、dbus-daemon、ffmpeg
+  - Xvfb、xfce4-session、xfwm4、xfce4-panel、xfdesktop、xauth、xdpyinfo、xprop、xdotool、xclip、dbus-daemon、ffmpeg
   - [tembo/voxl](https://github.com/tembo/voxl)：`cargo install voxl-server`，需要 x264/libyuv/opus/libpulse/esbuild
-  - 可选：xfdesktop、xfce4-panel、xfce4-terminal、thunar
+  - 可选：xfce4-terminal、thunar
 
 dudu 不会自动安装系统包，也不会修改你的默认桌面会话。
 
