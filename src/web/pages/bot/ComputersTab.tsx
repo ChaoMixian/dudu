@@ -9,16 +9,9 @@ import { useI18n } from '../../i18n';
 
 type Operation = ComputerAction | 'refresh';
 
-function friendlyError(cause: unknown, t: (key: 'computer.serviceOffline') => string): string {
-  const message = errorText(cause);
-  if (/ECONNREFUSED|Unable to connect|fetch failed/i.test(message)) return t('computer.serviceOffline');
-  return message;
-}
-
 export default function ComputersTab({ bot, autoTakeover = false }: { bot: BotConfig; autoTakeover?: boolean }) {
   const { token } = useAuth();
   const { t } = useI18n();
-  const bindingId = bot.bindings.find(binding => binding.connectorId === 'computer')?.id ?? 'computer';
   const [status, setStatus] = useState<DesktopStatus>();
   const [watch, setWatch] = useState<ComputerWatch>();
   const [error, setError] = useState('');
@@ -30,27 +23,15 @@ export default function ComputersTab({ bot, autoTakeover = false }: { bot: BotCo
   const autoTakeoverRef = useRef(false);
 
   const load = useCallback(async (controller: AbortController) => {
-    let next: DesktopStatus;
-    try {
-      next = await computerStatus(token, bot.id, bindingId, controller.signal);
-    } catch (cause) {
-      if (controller.signal.aborted) return;
-      // A desktop that has never been started is a normal stopped state, not an error.
-      if (/Unknown desktop/i.test(errorText(cause))) {
-        setStatus({ id: bindingId, botId: bot.id, width: 1280, height: 800, state: 'stopped' });
-        setWatch(undefined);
-        return;
-      }
-      throw cause;
-    }
+    const next = await computerStatus(token, bot.id, controller.signal);
     if (controller.signal.aborted) return;
     setStatus(next);
     if (next.state !== 'ready') { setWatch(undefined); return; }
     try {
-      const info = await computerWatch(token, bot.id, bindingId, controller.signal);
+      const info = await computerWatch(token, bot.id, controller.signal);
       if (!controller.signal.aborted) setWatch(info);
     } catch { if (!controller.signal.aborted) setWatch(undefined); }
-  }, [bindingId, bot.id, token]);
+  }, [bot.id, token]);
 
   const execute = useCallback(async (operation: Operation) => {
     if (requestRef.current) return;
@@ -61,7 +42,7 @@ export default function ComputersTab({ bot, autoTakeover = false }: { bot: BotCo
     try {
       if (operation === 'start' || operation === 'stop' || operation === 'takeover') {
         if (operation !== 'takeover') setWatch(undefined);
-        await computerAction(token, bot.id, bindingId, operation, controller.signal);
+        await computerAction(token, bot.id, operation, controller.signal);
         if (operation === 'takeover') {
           setTakeoverRequested(true);
           frameRef.current?.focus();
@@ -70,18 +51,18 @@ export default function ComputersTab({ bot, autoTakeover = false }: { bot: BotCo
       await load(controller);
       if (operation === 'refresh' || operation === 'start') setFrameKey(key => key + 1);
     } catch (cause) {
-      if (!controller.signal.aborted) setError(friendlyError(cause, t));
+      if (!controller.signal.aborted) setError(errorText(cause));
     } finally {
       if (requestRef.current === controller) { requestRef.current = undefined; setPending(undefined); }
     }
-  }, [bindingId, bot.id, load, token]);
+  }, [bot.id, load, token]);
 
   useEffect(() => {
     const controller = new AbortController();
     setError('');
     setWatch(undefined);
     setTakeoverRequested(false);
-    void load(controller).catch(cause => { if (!controller.signal.aborted) setError(friendlyError(cause, t)); });
+    void load(controller).catch(cause => { if (!controller.signal.aborted) setError(errorText(cause)); });
     return () => { controller.abort(); requestRef.current?.abort(); requestRef.current = undefined; };
   }, [load]);
 

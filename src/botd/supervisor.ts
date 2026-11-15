@@ -16,8 +16,6 @@ function integer(n: unknown, min: number, max: number, name: string) { if (!Numb
 /** One same-UID private X11 session per desktop. No host services or global environment are modified. */
 export class BotdSupervisor {
   readonly root: string;
-  readonly host: string;
-  readonly port: number;
   private options: BotdOptions;
   private initialized?: Promise<void>;
   private desktops = new Map<string, SavedDesktop>();
@@ -27,10 +25,10 @@ export class BotdSupervisor {
   private persistQueue: Promise<void> = Promise.resolve();
   private locked = false;
   private closing = false;
-  constructor(options: BotdOptions = {}) { this.options = options; this.root = resolve(options.root ?? DEFAULT_ROOT); this.host = options.host ?? '127.0.0.1'; this.port = options.port ?? 7332; }
+  constructor(options: BotdOptions = {}) { this.options = options; this.root = resolve(options.root ?? DEFAULT_ROOT); }
   init() { return this.initialized ??= this.initialize().catch(error => { this.initialized = undefined; throw error; }); }
   private async initialize() {
-    if (process.platform !== 'linux' || process.getuid?.() === undefined) throw new BotdError('botd requires Linux and same-UID process isolation');
+    if (process.platform !== 'linux' || process.getuid?.() === undefined) throw new BotdError('dudu desktop requires Linux and same-UID process isolation');
     await mkdir(this.root, { recursive: true, mode: 0o700 }); await chmod(this.root, 0o700);
     const lock = join(this.root, 'supervisor.lock');
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -39,7 +37,7 @@ export class BotdSupervisor {
         if (e.code !== 'EEXIST') throw e;
         const owner = await readFile(join(lock,'owner.json'), 'utf8').then(JSON.parse).catch(() => null);
         if (!owner) throw new BotdError(`Incomplete lock at ${lock}; inspect it before removing it`, 409);
-        if (alive(owner.pid) && await ticks(owner.pid) === owner.startTicks) throw new BotdError('Another botd owns this root', 409);
+        if (alive(owner.pid) && await ticks(owner.pid) === owner.startTicks) throw new BotdError('Another dudu process owns this root', 409);
         await rm(lock, { recursive: true });
       }
     }
@@ -69,7 +67,7 @@ export class BotdSupervisor {
     return { PATH: '/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin', HOME: home, USER: process.env.USER ?? String(process.getuid!()), LOGNAME: process.env.USER ?? String(process.getuid!()), SHELL: '/bin/sh', LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', DISPLAY: d.display!, XAUTHORITY: join(dir,'Xauthority'), XDG_RUNTIME_DIR: runtime, XDG_CONFIG_HOME: join(home,'.config'), XDG_CACHE_HOME: join(home,'.cache'), XDG_DATA_HOME: join(home,'.local/share'), XDG_STATE_HOME: join(home,'.local/state'), XDG_SESSION_TYPE: 'x11', XDG_CURRENT_DESKTOP: 'XFCE', DESKTOP_SESSION: 'xfce', DBUS_SESSION_BUS_ADDRESS: `unix:path=${join(dir,'run/bus')}`,  GDK_BACKEND: 'x11', QT_QPA_PLATFORM: 'xcb', NO_AT_BRIDGE: '1', TMPDIR: join(dir,'tmp') };
   }
   private async launch(d: SavedDesktop, argv: string[], label: string, options: { env?: Record<string,string>; cwd?: string; input?: string; capture?: boolean } = {}) {
-    const executable = Bun.which(argv[0]!); if (!executable) throw new BotdError(`Missing executable: ${argv[0]}. Install it separately; botd never installs system packages.`,503);
+    const executable = Bun.which(argv[0]!); if (!executable) throw new BotdError(`Missing executable: ${argv[0]}. Install it separately; dudu never installs system packages.`,503);
     const child = spawn(executable,argv.slice(1),{ detached: true, env: { ...this.environment(d), ...options.env }, cwd: options.cwd ?? join(this.dir(d.config.id),'home'), stdio: ['pipe','pipe','pipe'] });
     const spawned = new Promise<void>((ok,no) => { child.once('spawn', ok); child.once('error', no); });
     const record: ProcessRecord = { pid: child.pid!, startTicks: '', label };
@@ -109,6 +107,12 @@ export class BotdSupervisor {
     try { process.kill(-p.pid,'SIGKILL'); } catch {}
   }
   private async cleanup(d: SavedDesktop) { await Promise.all([...d.processes].reverse().map(p => this.kill(p))); d.processes = []; d.recording = undefined; }
+  private async wmPresent(d: SavedDesktop): Promise<boolean> {
+    const output = await this.check(d,['xprop','-root','_NET_SUPPORTING_WM_CHECK']);
+    const match = output.match(/0x[0-9a-f]+/i);
+    if (!match || match[0] === '0x0') return false;
+    return /xfwm/i.test(await this.check(d,['xprop','-id',match[0],'_NET_WM_NAME']));
+  }
   private async waitFor(fn: () => Promise<boolean>, d: SavedDesktop, what: string) {
     const end = Date.now() + (this.options.startupTimeoutMs ?? 30000); let error: unknown;
     while (Date.now() < end) {
@@ -119,12 +123,26 @@ export class BotdSupervisor {
     }
     throw new BotdError(`Desktop did not become ready: ${what}${error instanceof Error ? ` (${error.message})` : ''}`,503);
   }
+  /** Remove an X lock left behind by a killed server, never a live one. */
+  private async clearStaleDisplayLock(n: number): Promise<boolean> {
+    const lock = `/tmp/.X${n}-lock`;
+    try {
+      const pid = Number((await readFile(lock, 'utf8')).trim());
+      if (!Number.isInteger(pid) || pid <= 0 || alive(pid)) return false;
+      await rm(lock, { force: true });
+      await rm(`/tmp/.X11-unix/X${n}`, { force: true });
+      return true;
+    } catch { return false; }
+  }
   /** Serialize display allocation: concurrent starts must never choose the same X display. */
   private allocateDisplay(d: SavedDesktop): Promise<void> {
     const task = this.displayQueue.then(async () => {
       for (let n = 90; n < 1000; n++) {
         if ([...this.desktops.values()].some(other => other !== d && other.display === `:${n}` && ['ready','starting'].includes(other.state))) continue;
-        if (await lstat(`/tmp/.X${n}-lock`).then(() => true).catch(() => false) || await lstat(`/tmp/.X11-unix/X${n}`).then(() => true).catch(() => false)) continue;
+        if (await lstat(`/tmp/.X${n}-lock`).then(() => true).catch(() => false)) {
+          if (!await this.clearStaleDisplayLock(n)) continue;
+        }
+        if (await lstat(`/tmp/.X11-unix/X${n}`).then(() => true).catch(() => false)) continue;
         d.display = `:${n}`;
         return;
       }
@@ -143,6 +161,9 @@ export class BotdSupervisor {
       try {
         const missing = BINARIES.filter(n => !Bun.which(n)); if (missing.length) throw new BotdError(`Missing desktop dependencies: ${missing.join(', ')}. voxl is tembo/voxl (voxl-server); no packages were installed.`,503);
         const dir = this.dir(config.id);
+        // Runtime sockets belong to one session. A stale bus socket must not make
+        // a new D-Bus look alive or prevent the next daemon from binding.
+        await rm(join(dir,'run'),{recursive:true,force:true});
         for (const sub of ['', 'home','home/.config','home/.cache','home/.local/share','home/.local/state','run','tmp','files','recordings']) await mkdir(join(dir,sub),{ recursive: true, mode: 0o700 });
         await chmod(join(dir,'run'),0o700);
         // X sockets are necessarily host-global. Never delete a socket or lock belonging to another X server.
@@ -160,10 +181,16 @@ export class BotdSupervisor {
         await this.launch(d,['dbus-daemon',`--config-file=${busConfig}`,'--nofork','--nopidfile'],'dbus');
         await this.waitFor(async () => lstat(join(dir,'run/bus')).then(s => s.isSocket()).catch(() => false),d,'private D-Bus');
         await this.launch(d,['xfce4-session','--disable-tcp'],'xfce');
-        await this.waitFor(async () => {
-          const output = await this.check(d,['xprop','-root','_NET_SUPPORTING_WM_CHECK']); const match = output.match(/0x[0-9a-f]+/i); if (!match || match[0] === '0x0') return false;
-          return /xfwm/i.test(await this.check(d,['xprop','-id',match[0],'_NET_WM_NAME']));
-        },d,'Xfce window manager');
+        // Session activation normally starts xfwm4. Some installs do not (for
+        // example when xfsettingsd is absent), so only start it ourselves when
+        // the session has not produced a window manager after a short grace.
+        let managed = false;
+        for (let attempt = 0; attempt < 6 && !managed; attempt++) {
+          if (attempt) await sleep(200);
+          managed = await this.wmPresent(d).catch(() => false);
+        }
+        if (!managed) await this.launch(d,['xfwm4'],'xfwm4');
+        await this.waitFor(() => this.wmPresent(d),d,'Xfce window manager');
         // voxl reads DISPLAY for the X session and VOXL_PASSWORD for basic auth.
         await this.launch(d,['voxl','--addr=127.0.0.1',`--port=${d.port}`,'--enable-basic-auth=true'],'voxl',{env:{VOXL_PASSWORD:d.password}});
         await this.waitFor(async () => { const r = await fetch(`http://127.0.0.1:${d.port}/healthz`,{signal:AbortSignal.timeout(2000)}); return r.ok; },d,'voxl health');
@@ -198,7 +225,7 @@ export class BotdSupervisor {
   async recordStart(id: string, options: {fps?:number} = {}): Promise<RecordingInfo> { await this.init(); return this.serial(id,async () => { const d = this.ready(id); if (d.recording) throw new BotdError('Recording already running',409); const recordId = randomBytes(8).toString('hex'), path = `recordings/${recordId}.mkv`; const task = await this.launch(d,['ffmpeg','-nostdin','-hide_banner','-loglevel','warning','-f','x11grab','-draw_mouse','1','-framerate',String(integer(options.fps ?? 15,1,60,'fps')),'-video_size',`${d.config.width}x${d.config.height}`,'-i',`${d.display}.0`,'-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-y',join(this.dir(id),path)],'record'); await sleep(300); if (task.child.exitCode !== null || task.child.signalCode !== null) throw new BotdError('ffmpeg recording failed; inspect private record.log',503); d.recording = {id:recordId,path,startedAt:new Date().toISOString()}; await this.persist(); return d.recording; }); }
   async recordStop(id: string): Promise<RecordingInfo> { await this.init(); return this.serial(id,async () => { const d = this.lookup(id); if (!d.recording) throw new BotdError('No recording in progress',409); const info = d.recording; const p = d.processes.find(p => p.label==='record'); if (p && await ticks(p.pid) === p.startTicks) { try { process.kill(-p.pid,'SIGINT'); } catch {} for (let i=0;i<100 && alive(p.pid);i++) await sleep(50); if (alive(p.pid)) await this.kill(p); } d.recording=undefined; await this.persist(); return info; }); }
   async recording(id: string, recordId: string): Promise<Uint8Array> { await this.init(); validId(id); if (!/^[a-f0-9]{16}$/.test(recordId)) throw new BotdError('Invalid recording identifier'); this.lookup(id); const path=join(this.dir(id),'recordings',`${recordId}.mkv`); const s=await lstat(path).catch(() => { throw new BotdError('Recording not found',404); }); if (!s.isFile() || s.isSymbolicLink()) throw new BotdError('Invalid recording'); if(s.size>256*1024*1024) throw new BotdError('Recording exceeds 256 MiB download limit',413); return readFile(path); }
-  async watch(id: string): Promise<WatchInfo> { await this.init(); const d = this.lookup(id); return {id,state:d.state,display:d.display,port:d.port,url:d.state==='ready'?`http://127.0.0.1:${d.port}/?token=${encodeURIComponent(d.password!)}`:undefined,username:'botd',password:d.password,localOnly:true}; }
+  async watch(id: string): Promise<WatchInfo> { await this.init(); const d = this.lookup(id); return {id,state:d.state,display:d.display,port:d.port,url:d.state==='ready'?`http://127.0.0.1:${d.port}/?token=${encodeURIComponent(d.password!)}`:undefined,username:'dudu',password:d.password,localOnly:true}; }
 
   // ── cua-aligned computer-use surface ─────────────────────────────────────
   // Method names/signatures mirror cua's Computer interface (spacesd + Python SDK).

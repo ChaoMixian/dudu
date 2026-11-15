@@ -8,7 +8,7 @@ const provider: ProviderConfig = {
   id: 'main', name: 'Main', api: 'openai-completions', baseUrl: 'https://example.com/v1', apiKey: 'sk-plaintext',
   models: [{ id: 'model-a', name: 'Model A' }],
 };
-const bot: BotConfig = { id: 'bot-a', name: 'Bot A', description: '', paused: false, bindings: [], provider: 'main' };
+const bot: BotConfig = { id: 'bot-a', name: 'Bot A', description: '', paused: false, computer: {}, provider: 'main' };
 const clone = <T>(value: T): T => structuredClone(value);
 
 function expectInvalid(patch: Partial<ReturnType<typeof providerDraft>>, message: string) {

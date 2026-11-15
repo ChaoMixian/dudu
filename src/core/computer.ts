@@ -1,23 +1,18 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { id, type DesktopConfig, type DesktopStatus } from '../contracts';
+import type { DesktopConfig, DesktopStatus } from '../contracts';
 import { BotdSupervisor } from '../botd/supervisor';
 import { BotdError } from '../botd/types';
 import type { ConfigStore } from './config';
 import type { Store } from './store';
 import { botdRoot } from './workspace';
 
-export interface ComputerTarget { bindingId: string; desktopId: string; width: number; height: number }
+export interface ComputerTarget { desktopId: string; width: number; height: number; watchUrl?: string }
 
-/** Resolve a bot's computer binding to a desktop. The desktop service itself is workspace-wide. */
-export function resolveComputerTarget(config: ConfigStore, botId: string, bindingId: string): ComputerTarget {
-  const binding = config.bot(botId).bindings.find(x => x.id === bindingId && x.connectorId === 'computer');
-  // Every bot owns a desktop, even when the binding was never written explicitly.
-  if (!binding && bindingId !== 'computer') throw new Error('Unknown computer binding');
-  const c = binding?.config ?? {};
-  const width = Number.isInteger(c.width) ? Number(c.width) : 1280;
-  const height = Number.isInteger(c.height) ? Number(c.height) : 800;
-  return { bindingId, desktopId: id(String(c.desktopId ?? `${botId}-${bindingId}`)), width, height };
+/** ConfigStore normalizes every computer field when it reads a Bot. */
+export function resolveComputerTarget(config: ConfigStore, botId: string): ComputerTarget {
+  const { desktopId, width, height, watchUrl } = config.bot(botId).computer;
+  return { desktopId: desktopId!, width: width!, height: height!, watchUrl };
 }
 
 /**
@@ -31,21 +26,21 @@ export class Computer {
     this.supervisor = supervisor ?? new BotdSupervisor({ root: botdRoot(config.root) });
   }
 
-  target(botId: string, bindingId: string) { return resolveComputerTarget(this.config, botId, bindingId); }
+  target(botId: string) { return resolveComputerTarget(this.config, botId); }
 
   async desktops(): Promise<DesktopStatus[]> {
     try { return await this.supervisor.list(); } catch { return []; }
   }
 
   /** cua-aligned tool surface, called in-process by the agent. */
-  async cua(botId: string, bindingId: string, method: string, args: Record<string, any> = {}, signal?: AbortSignal): Promise<unknown> {
+  async cua(botId: string, method: string, args: Record<string, any> = {}, signal?: AbortSignal): Promise<unknown> {
     signal?.throwIfAborted();
-    const target = this.target(botId, bindingId);
+    const target = this.target(botId);
     const d = target.desktopId;
     // Lifecycle tools are the admin plane exposed as agent tools.
-    if (method === 'start' || method === 'stop' || method === 'status') return this.call(botId, bindingId, method, args, signal);
+    if (method === 'start' || method === 'stop' || method === 'status') return this.call(botId, method, args, signal);
     // Lazy start: the first computer-use tool brings a stopped desktop up.
-    await this.ensureDesktop(botId, bindingId, target, signal);
+    await this.ensureDesktop(botId, target, signal);
     const s = this.supervisor;
     switch (method) {
       case 'screenshot': {
@@ -98,14 +93,14 @@ export class Computer {
   }
 
   /** Admin/lifecycle plane used by the web UI and the live-view proxy. */
-  async call(botId: string, bindingId: string, action: string, args: Record<string, any> = {}, signal?: AbortSignal): Promise<any> {
+  async call(botId: string, action: string, args: Record<string, any> = {}, signal?: AbortSignal): Promise<any> {
     signal?.throwIfAborted();
-    const target = this.target(botId, bindingId);
-    const { desktopId, width, height } = target;
+    const target = this.target(botId);
+    const { desktopId, width, height, watchUrl } = target;
     const s = this.supervisor;
     if (action === 'takeover') {
-      this.store.publish({ botId, sourceId: `computer:${bindingId}`, type: 'computer.takeover', payload: { bindingId, requestedAt: new Date().toISOString() }, wake: false });
-      return { status: 'requested', ...(await this.call(botId, bindingId, 'watch', {}, signal)) };
+      this.store.publish({ botId, sourceId: 'computer', type: 'computer.takeover', payload: { requestedAt: new Date().toISOString() }, delivery: 'digest' });
+      return { status: 'requested', ...(await this.call(botId, 'watch', {}, signal)) };
     }
     if (action === 'start') {
       const current = await this.desktopState(desktopId);
@@ -113,13 +108,13 @@ export class Computer {
       if (current?.state === 'starting') return this.waitReady(desktopId, signal);
       const config: DesktopConfig = { id: desktopId, botId, width, height };
       const result = await s.start(config);
-      this.store.publish({ botId, sourceId: `computer:${bindingId}`, type: 'computer.started', payload: { bindingId, desktopId, state: result.state, port: result.port }, wake: false });
+      this.store.publish({ botId, sourceId: 'computer', type: 'computer.started', payload: { desktopId, state: result.state, port: result.port }, delivery: 'ignore' });
       return result;
     }
     if (action === 'stop') {
       if (!await this.desktopState(desktopId)) return { id: desktopId, botId, width, height, state: 'stopped' };
       const result = await s.stop(desktopId);
-      this.store.publish({ botId, sourceId: `computer:${bindingId}`, type: 'computer.stopped', payload: { bindingId, desktopId, state: result.state, port: result.port }, wake: false });
+      this.store.publish({ botId, sourceId: 'computer', type: 'computer.stopped', payload: { desktopId, state: result.state, port: result.port }, delivery: 'ignore' });
       return result;
     }
     if (action === 'restart') return s.restart(desktopId);
@@ -130,13 +125,12 @@ export class Computer {
     if (action === 'shot') {
       const bytes = await s.shot(desktopId);
       const dir = join(this.config.botPath(botId), 'artifacts'); mkdirSync(dir, { recursive: true });
-      const path = join(dir, `${bindingId}-${Date.now()}.png`); await Bun.write(path, bytes);
+      const path = join(dir, `computer-${Date.now()}.png`); await Bun.write(path, bytes);
       return { path, url: `/api/artifacts/${botId}/${path.split('/').pop()}`, mimeType: 'image/png', base64: Buffer.from(bytes).toString('base64') };
     }
     if (action === 'watch') {
       const result = await s.watch(desktopId);
-      const binding = this.config.bot(botId).bindings.find(x => x.id === bindingId);
-      if (binding?.config.watchUrl) result.url = String(binding.config.watchUrl);
+      if (watchUrl) result.url = watchUrl;
       return result;
     }
     if (action === 'recordStart') return s.recordStart(desktopId, args);
@@ -162,24 +156,22 @@ export class Computer {
   }
 
   /** Start a stopped desktop before the first computer-use call. */
-  private async ensureDesktop(botId: string, bindingId: string, target: ComputerTarget, signal?: AbortSignal): Promise<void> {
+  private async ensureDesktop(botId: string, target: ComputerTarget, signal?: AbortSignal): Promise<void> {
     const status = await this.desktopState(target.desktopId);
     if (status?.state === 'ready') return;
     if (status?.state === 'starting') { await this.waitReady(target.desktopId, signal); return; }
     if (status?.state === 'error') throw new Error(`Desktop ${target.desktopId} is in error: ${status.error ?? 'unknown'}`);
-    await this.call(botId, bindingId, 'start', {}, signal);
+    await this.call(botId, 'start', {}, signal);
   }
 
   /** Start every Bot desktop when auto-start is enabled. */
   async startConfigured(): Promise<void> {
     if (this.config.global().autoStartComputers === false) return;
     for (const bot of this.config.bots()) {
-      for (const binding of bot.bindings.filter(x => x.connectorId === 'computer')) {
-        void this.call(bot.id, binding.id, 'start').catch(error => this.store.publish({
-          botId: bot.id, sourceId: `computer:${binding.id}`, type: 'computer.error',
-          payload: { bindingId: binding.id, error: String(error) }, wake: false,
-        }));
-      }
+      await this.call(bot.id, 'start').catch(error => this.store.publish({
+        botId: bot.id, sourceId: 'computer', type: 'computer.error',
+        payload: { error: String(error) }, delivery: 'digest',
+      }));
     }
   }
 

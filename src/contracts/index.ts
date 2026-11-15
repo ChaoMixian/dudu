@@ -8,12 +8,12 @@ export type Delivery = 'wake' | 'digest' | 'ignore';
 export interface EventInput { eventId?: string; sourceId: string; type: string; botId: string; priority?: Priority; payload: unknown; replyTo?: Route; correlationId?: string; dedupeKey?: string; delivery?: Delivery; wake?: boolean }
 export interface DuduEvent extends Omit<EventInput, 'delivery' | 'wake'> { eventId: string; priority: Priority; seq: number; createdAt: string; delivery: Delivery }
 export type InboxStatus = 'pending' | 'delivering' | 'completed' | 'failed' | 'cancelled';
-export interface Binding { id: string; connectorId: string; config: Record<string, unknown> }
-export interface BotConfig { id: string; name: string; description: string; avatar?: string; color?: string; provider?: string; model?: string; thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; paused: boolean; bindings: Binding[] }
+export interface ComputerConfig { desktopId?: string; width?: number; height?: number; watchUrl?: string }
+export interface BotConfig { id: string; name: string; description: string; avatar?: string; color?: string; provider?: string; model?: string; thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; paused: boolean; computer: ComputerConfig }
 export interface ProviderConfig { id: string; name?: string; baseUrl: string; api: 'openai-completions' | 'openai-responses' | 'anthropic-messages'; apiKey?: string; models: { id: string; name: string; reasoning?: boolean; contextWindow?: number; maxTokens?: number }[] }
 export interface GlobalConfig { host: string; port: number; token?: string; providers: ProviderConfig[]; defaultProvider?: string; defaultModel?: string; autoStartComputers?: boolean }
 export interface ConnectorTool { name: string; description: string; parameters: Record<string, unknown> }
-export interface ConnectorDefinition { id: string; name: string; description: string; transport: 'command' | 'mcp' | 'http' | 'local'; argv?: string[]; url?: string; env?: Record<string,string>; tools: ConnectorTool[] }
+export interface ConnectorDefinition { id: string; name: string; description: string; transport: 'command' | 'mcp' | 'http'; argv?: string[]; url?: string; env?: Record<string,string>; tools: ConnectorTool[] }
 export interface SourceConfig { id: string; botId: string; kind: 'once' | 'interval' | 'cron' | 'process' | 'webhook'; enabled: boolean; priority: Priority; payload: unknown; at?: string; intervalMs?: number; cron?: string; argv?: string[]; env?: Record<string, string>; type?: string; timezone?: string }
 export interface DesktopConfig { id: string; botId: string; width: number; height: number }
 export interface DesktopStatus extends DesktopConfig { state: 'stopped' | 'starting' | 'ready' | 'error'; display?: string; port?: number; error?: string; watchUrl?: string }

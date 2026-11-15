@@ -40,7 +40,7 @@ export default function ConnectorsPage({ onDirtyChange, onPendingChange }: { onD
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
   const [discarding, setDiscarding] = useState(false);
-  const connectors = state.connectors.filter(connector => connector.id !== 'computer');
+  const connectors = state.connectors;
   const dirty = Boolean(draft && JSON.stringify(draft) !== baseline);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => { onPendingChange?.(pending); }, [pending, onPendingChange]);
@@ -50,6 +50,10 @@ export default function ConnectorsPage({ onDirtyChange, onPendingChange }: { onD
   const open = (connector?: Connector) => { const next = makeDraft(connector); setDraft(next); setBaseline(JSON.stringify(next)); setError(''); };
   const close = () => { if (pendingRef.current) return; if (dirty) setDiscarding(true); else setDraft(null); };
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(current => current ? { ...current, [key]: value } : current);
+  const updateTransport = (value: string) => {
+    const transport = value as Draft['transport'];
+    setDraft(current => current ? { ...current, transport, ...(transport === 'mcp' ? {} : { remote: false }) } : current);
+  };
   const updateTool = (index: number, value: Partial<ToolDraft>) => { if (draft) update('tools', draft.tools.map((tool, i) => i === index ? { ...tool, ...value } : tool)); };
   const updateField = (toolIndex: number, fieldIndex: number, value: Partial<Parameter>) => {
     const tool = draft?.tools[toolIndex]; if (tool) updateTool(toolIndex, { fields: tool.fields.map((field, i) => i === fieldIndex ? { ...field, ...value } : field) });
@@ -104,7 +108,6 @@ export default function ConnectorsPage({ onDirtyChange, onPendingChange }: { onD
           <Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>
           <Checkbox.Content>{t('connectors.autoStart')}</Checkbox.Content>
         </Checkbox>
-        <span className="rounded-full border border-separator px-3 py-1 text-xs text-muted">{t('gui.builtin')}</span>
       </div>
     </section>
     {!connectors.length && <EmptyState className="rounded-2xl border border-separator bg-surface px-6 py-14"><p>{t('connectors.none')}</p></EmptyState>}
@@ -112,7 +115,7 @@ export default function ConnectorsPage({ onDirtyChange, onPendingChange }: { onD
       {connectors.map((connector, index) => <article key={connector.id} className={`flex min-w-0 items-center gap-4 px-5 py-4 ${index ? 'border-t border-separator' : ''}`}>
         <div className="provider-glyph" aria-hidden="true"><Plug size={18} /></div>
         <div className="min-w-0 flex-1"><h3 className="truncate text-[15px] font-semibold tracking-tight">{connector.name}</h3><p className="mt-0.5 truncate text-xs text-muted">{connector.transport.toUpperCase()} · {connector.tools.length} {t('gui.tools')}</p></div>
-        <Button variant="ghost" size="sm" className="rounded-full" isDisabled={Boolean(busy) || connector.id === 'computer'} onPress={() => open(connector as Connector)}><Pencil size={15} />{connector.id === 'computer' ? t('gui.builtin') : t('gui.edit')}</Button>
+        <Button variant="ghost" size="sm" className="rounded-full" isDisabled={Boolean(busy)} onPress={() => open(connector as Connector)}><Pencil size={15} />{t('gui.edit')}</Button>
       </article>)}
     </div>}
     <Modal isOpen={Boolean(draft)} onOpenChange={isOpen => { if (!isOpen) close(); }}>
@@ -122,10 +125,10 @@ export default function ConnectorsPage({ onDirtyChange, onPendingChange }: { onD
           {error && <Alert status="danger"><Alert.Content><Alert.Description>{error}</Alert.Description></Alert.Content></Alert>}
           <div className="grid gap-4 sm:grid-cols-2"><TextField value={draft.id} isReadOnly={Boolean(draft.original)} isDisabled={pending} onChange={value => update('id', value)}><Label>{t('gui.id')}</Label><Input /></TextField><TextField value={draft.name} isDisabled={pending} onChange={value => update('name', value)}><Label>{t('gui.name')}</Label><Input /></TextField></div>
           <TextField value={draft.description} isDisabled={pending} onChange={value => update('description', value)}><Label>{t('gui.description')}</Label><TextArea rows={2} /></TextField>
-          <div className="grid gap-4 sm:grid-cols-2">{select(t('gui.transport'), draft.transport, ['mcp', 'command', 'http'].map(id => ({ id, name: id.toUpperCase() })), value => update('transport', value as Draft['transport']))}{draft.transport === 'mcp' && select(t('gui.transport'), draft.remote ? 'remote' : 'local', [{ id: 'local', name: t('gui.local') }, { id: 'remote', name: t('gui.remote') }], value => update('remote', value === 'remote'))}</div>
+          <div className="grid gap-4 sm:grid-cols-2">{select(t('gui.transport'), draft.transport, ['mcp', 'command', 'http'].map(id => ({ id, name: id.toUpperCase() })), updateTransport)}{draft.transport === 'mcp' && select(t('gui.transport'), draft.remote ? 'remote' : 'stdio', [{ id: 'stdio', name: t('gui.local') }, { id: 'remote', name: t('gui.remote') }], value => update('remote', value === 'remote'))}</div>
           {draft.transport === 'http' || (draft.transport === 'mcp' && draft.remote) ? <TextField value={draft.url} isDisabled={pending} onChange={value => update('url', value)}><Label>{t('gui.url')}</Label><Input type="url" /></TextField> : <><TextField value={draft.command} isDisabled={pending} onChange={value => update('command', value)}><Label>{t('gui.executable')}</Label><Input /></TextField><ArgumentEditor value={draft.args} disabled={pending} onChange={value => update('args', value)} /></>}
           <StringMapEditor label={t('gui.environment')} value={draft.env} disabled={pending} onChange={value => update('env', value)} />
-          {(draft.transport === 'http' || draft.remote) && <StringMapEditor label={t('gui.headers')} value={draft.headers} disabled={pending} onChange={value => update('headers', value)} />}
+          {(draft.transport === 'http' || (draft.transport === 'mcp' && draft.remote)) && <StringMapEditor label={t('gui.headers')} value={draft.headers} disabled={pending} onChange={value => update('headers', value)} />}
           <TextField value={draft.timeout} isDisabled={pending} onChange={value => update('timeout', value)}><Label>{t('gui.timeout')}</Label><Input type="number" min={1} /></TextField>
           <section className="flex flex-col gap-4"><div className="flex items-center justify-between"><h3 className="font-medium">{t('gui.tools')}</h3><Button size="sm" variant="secondary" isDisabled={pending} onPress={() => update('tools', [...draft.tools, toolDraft({ name: '', description: '', parameters: { type: 'object', properties: {} } })])}><Plus size={14} />{t('gui.addTool')}</Button></div>
             {draft.tools.map((tool, ti) => <Card key={ti} variant="secondary"><Card.Content className="flex flex-col gap-4">

@@ -8,7 +8,6 @@
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "start": "bun src/server.ts",
-    "botd": "bun src/botd/main.ts",
     "cli": "bun src/cli.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { workspaceRoot } from './core/workspace';
 const args=process.argv.slice(2);const command=args.shift()??'help';
@@ -12,5 +11,5 @@ async function main(){if(command==='doctor')return doctor();
 if(command==='events'){const action=args.shift()??'list';if(action==='list')return (await request('/api/state')).sources;if(action==='register')return request('/api/sources','POST',await input());if(action==='submit')return request('/api/events','POST',await input());const sourceId=args.shift();if(action==='remove')return request(`/api/sources/${sourceId}`,'DELETE');if(['enable','disable','trigger'].includes(action))return request(`/api/sources/${sourceId}/${action}`,'POST',{});}
 if(command==='connectors'){const action=args.shift()??'list';if(action==='list')return (await request('/api/state')).connectors;if(action==='register')return request('/api/connectors','POST',await input());}
 if(command==='providers')return request('/api/providers','PUT',await input());
-return {usage:['dudu doctor | state','dudu bots list | new <json|-> | config <id> <json|-> | pause/resume/stop <id>','dudu send <bot-id> <text>','dudu events list | register/submit <json|-> | enable/disable/remove/trigger <source-id>','dudu connectors list | register <json|->','dudu providers <json|->'],environment:['DUDU_URL','DUDU_TOKEN','DUDU_WORKSPACE'],botd:'bun src/botd/main.ts --help'};}
+return {usage:['dudu doctor | state','dudu bots list | new <json|-> | config <id> <json|-> | pause/resume/stop <id>','dudu send <bot-id> <text>','dudu events list | register/submit <json|-> | enable/disable/remove/trigger <source-id>','dudu connectors list | register <json|->','dudu providers <json|->'],environment:['DUDU_URL','DUDU_TOKEN','DUDU_WORKSPACE']};}
 if(import.meta.main)main().then(value=>console.log(JSON.stringify(value,null,2))).catch(error=>{console.error(String(error));process.exitCode=1;});
