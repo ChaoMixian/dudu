@@ -903,7 +903,7 @@ body {
 
 .chat-bubble {
   max-width: 100%;
-  border-radius: 7px;
+  border-radius: 18px;
   padding: 10px 14px;
 }
 
@@ -917,15 +917,15 @@ body {
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
 }
 
-.chat-bubble.group-start {
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
-}
+/* Consecutive bubbles round the outside fully and only tighten the corner
+   that faces the next bubble on the side the messages are aligned to. */
+.chat-bubble-user.group-start:not(.group-end) { border-bottom-right-radius: 7px; }
+.chat-bubble-user:not(.group-start):not(.group-end) { border-top-right-radius: 7px; border-bottom-right-radius: 7px; }
+.chat-bubble-user.group-end:not(.group-start) { border-top-right-radius: 7px; }
 
-.chat-bubble.group-end {
-  border-bottom-left-radius: 18px;
-  border-bottom-right-radius: 18px;
-}
+.chat-bubble-assistant.group-start:not(.group-end) { border-bottom-left-radius: 7px; }
+.chat-bubble-assistant:not(.group-start):not(.group-end) { border-top-left-radius: 7px; border-bottom-left-radius: 7px; }
+.chat-bubble-assistant.group-end:not(.group-start) { border-top-left-radius: 7px; }
 
 .chat-bubble-wrap {
   position: relative;
