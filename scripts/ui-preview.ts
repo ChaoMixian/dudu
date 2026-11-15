@@ -1,18 +1,19 @@
 import { resolve } from 'node:path';
 import type { AppState } from '../src/web/lib/types';
+import { renderAvatar } from '../src/web/lib/avatar-styles';
 
 // UI-only, in-memory fixtures. This server never starts a scheduler, model, or desktop.
 // Set UI_PREVIEW_LANG=en to render the English fixture used by README.en.md screenshots.
 const en = process.env.UI_PREVIEW_LANG === 'en';
 const createdAt = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 const bots = en ? [
-  { id: 'assistant', name: 'Workspace Assistant', description: 'Organizes information, breaks down tasks, and follows every step.', avatar: 'dicebear:gaze:dudu-assistant', color: 'teal', provider: 'local', model: 'workspace-model', paused: false, bindings: [{ id: 'computer', connectorId: 'computer', config: { desktopId: 'workspace-desktop' } }] },
-  { id: 'developer', name: 'Dev Partner', description: 'Reviews code, finds problems, and records verification results.', avatar: 'dicebear:gaze:dudu-developer', color: 'blue', provider: 'local', model: 'workspace-model', paused: true, bindings: [] },
-  { id: 'ideas', name: 'Idea Notes', description: 'Turns scattered thoughts into actionable plans.', avatar: 'dicebear:gaze:dudu-ideas', color: 'amber', provider: 'local', model: 'workspace-model', paused: false, bindings: [] },
+  { id: 'assistant', name: 'Workspace Assistant', description: 'Organizes information, breaks down tasks, and follows every step.', avatar: 'dicebear:gaze:dudu-assistant', color: 'teal', provider: 'local', model: 'workspace-model', paused: false, computer: { desktopId: 'workspace-desktop', width: 1280, height: 800 } },
+  { id: 'developer', name: 'Dev Partner', description: 'Reviews code, finds problems, and records verification results.', avatar: 'dicebear:gaze:dudu-developer', color: 'blue', provider: 'local', model: 'workspace-model', paused: true, computer: {} },
+  { id: 'ideas', name: 'Idea Notes', description: 'Turns scattered thoughts into actionable plans.', avatar: 'dicebear:gaze:dudu-ideas', color: 'amber', provider: 'local', model: 'workspace-model', paused: false, computer: {} },
 ] : [
-  { id: 'assistant', name: '工作助手', description: '整理信息、拆解任务，跟进每一步。', avatar: 'dicebear:gaze:dudu-assistant', color: 'teal', provider: 'local', model: 'workspace-model', paused: false, bindings: [{ id: 'computer', connectorId: 'computer', config: { desktopId: 'workspace-desktop' } }] },
-  { id: 'developer', name: '开发搭档', description: '审阅代码、定位问题、记录验证结果。', avatar: 'dicebear:gaze:dudu-developer', color: 'blue', provider: 'local', model: 'workspace-model', paused: true, bindings: [] },
-  { id: 'ideas', name: '灵感笔记', description: '把零散想法整理成可执行的方案。', avatar: 'dicebear:gaze:dudu-ideas', color: 'amber', provider: 'local', model: 'workspace-model', paused: false, bindings: [] },
+  { id: 'assistant', name: '工作助手', description: '整理信息、拆解任务，跟进每一步。', avatar: 'dicebear:gaze:dudu-assistant', color: 'teal', provider: 'local', model: 'workspace-model', paused: false, computer: { desktopId: 'workspace-desktop', width: 1280, height: 800 } },
+  { id: 'developer', name: '开发搭档', description: '审阅代码、定位问题、记录验证结果。', avatar: 'dicebear:gaze:dudu-developer', color: 'blue', provider: 'local', model: 'workspace-model', paused: true, computer: {} },
+  { id: 'ideas', name: '灵感笔记', description: '把零散想法整理成可执行的方案。', avatar: 'dicebear:gaze:dudu-ideas', color: 'amber', provider: 'local', model: 'workspace-model', paused: false, computer: {} },
 ];
 const messages = en ? [
   { id: 'm1', botId: 'assistant', conversationId: 'default', sender: 'user', kind: 'message', text: 'Help me organize today\'s work, and make the interface and interaction details the priority.', status: 'sent', seq: 1, createdAt: createdAt(50) },
@@ -50,7 +51,8 @@ const thread = en ? [
 ];
 const state: AppState = {
   bots,
-  connectors: [{ id: 'computer', name: en ? 'Workspace computer' : '工作区电脑', description: en ? 'Local desktop adapter' : '本地桌面适配器', transport: 'local', tools: [{ name: 'status', description: en ? 'Read desktop status' : '读取桌面状态', parameters: { type: 'object' } }] }],
+  profile: { name: en ? 'Chao' : '炒米线', avatar: await renderAvatar('gaze', 'classic', 'dudu-profile', 80), avatarStyle: 'gaze', avatarPreset: 'classic' },
+  connectors: [],
   providers: [{ id: 'local', name: 'Local workspace', api: 'openai-completions', baseUrl: 'http://127.0.0.1:9999/v1', apiKey: 'preview-key', models: [{ id: 'workspace-model', name: 'Workspace model' }, { id: 'reasoning-model', name: 'Reasoning model' }] }],
   defaults: { provider: 'local', model: 'workspace-model' },
   autoStartComputers: true,
@@ -89,7 +91,7 @@ const server = Bun.serve({
         state.messages.push({ id: `preview-${seq}`, botId: body.botId, conversationId: 'default', sender: 'user', kind: 'message', text: body.text, createdAt: new Date().toISOString(), seq, status: 'sent' });
         publish(); return Response.json({ accepted: true }, { status: 202 });
       }
-      if (path.includes('/computers/')) {
+      if (path.includes('/computer/')) {
         const action = path.split('/').at(-1);
         if (action === 'start') desktop.state = 'ready';
         if (action === 'stop') desktop.state = 'stopped';
@@ -109,7 +111,7 @@ const server = Bun.serve({
         if (req.method === 'DELETE') state.sources = state.sources.filter(source => source.id !== id);
         else { const source = state.sources.find(source => source.id === id); if (source && action !== 'trigger') source.enabled = action === 'enable'; }
       } else if (path === '/api/bots' && req.method === 'POST') {
-        const bot = { ...body, id: `bot-${Math.random().toString(36).slice(2, 6)}`, paused: false, bindings: [{ id: 'computer', connectorId: 'computer', config: { desktopId: 'preview-desktop' } }] };
+        const bot = { ...body, id: `bot-${Math.random().toString(36).slice(2, 6)}`, paused: false, computer: { desktopId: 'preview-desktop', width: 1280, height: 800 } };
         state.bots.push(bot);
         state.statuses.push({ botId: bot.id, state: 'idle', pending: 0 });
         const seq = Math.max(...state.messages.map((message) => message.seq)) + 1;
