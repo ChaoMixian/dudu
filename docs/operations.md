@@ -36,7 +36,7 @@ bun run build:binary
 ./release/dudu
 ```
 
-电脑桌面由 dudu 进程内的 supervisor 直接管理，不需要额外的 botd 进程；`dudu botd serve` 只保留给独立调试和脚本使用。
+电脑桌面由 dudu 进程内的 supervisor 直接管理，不需要额外的 botd 进程。
 
 启动 dudu 的进程必须能在 `PATH` 里找到 `voxl`（通常用 `cargo install voxl-server` 安装到 `~/.cargo/bin`）。示例：
 
@@ -48,7 +48,7 @@ PATH="$HOME/.cargo/bin:$PATH" bun run start
 
 默认地址：http://127.0.0.1:7331
 
-独立调试的 botd 只监听 loopback。它和主进程共用同一个桌面锁，因此 dudu 运行时不能同时再起一个 botd。远程访问时不要直接暴露 botd；正式部署只需通过 HTTPS 反向代理访问 dudu。
+桌面会话由 dudu 进程直接管理，不暴露独立的 botd HTTP 端口；远程访问只需通过 HTTPS 反向代理访问 dudu。
 
 ## 工作区
 
@@ -144,7 +144,7 @@ Bot 间通信的保护：
 
 - Bot 间事件有 1 秒合并窗口，空闲时按 seq 一次性交付
 - 每对 Bot 自上次人类发言后最多自动互发 20 条
-- 超过 20 条后消息仍然保存并显示在往来记录中，但不再自动唤醒对方
+- 超过 20 条后消息仍然保存并显示在往来记录中；不会立即唤醒对方，但会进入对方下一次运行的 digest
 - `message_send` 返回和收到的 Bot 事件都会带 `remaining`；为 0 时提示 Bot 停止并请人类继续
 - 人类给其中任一 Bot 发消息会重置该 Bot 相关的计数
 
@@ -155,18 +155,17 @@ Bot 间通信的保护：
 电脑桌面不需要配置服务地址。每个 Bot 自动获得独立桌面：
 
 - dudu 进程内的 supervisor 负责启动 Xvfb/桌面会话
-- Agent 的 computer 工具是进程内 `local` 连接器，不经过 MCP 子进程或 HTTP
+- Agent 的 computer 工具是 dudu 内置能力，直接调用 `Computer.cua()`，不经过连接器、MCP 或 HTTP
 - 设置 → 连接器里的“启动时自动拉起桌面”控制 dudu 启动时是否恢复所有桌面（默认开启）
 - 即使关闭该开关，Bot 第一次调用电脑工具时也会自动启动自己已停止的桌面
 - Bot 也可以直接调用 `computer__status` / `computer__start` / `computer__stop`
-- dudu 以 `/api/bots/:botId/computers/:bindingId/live/` 同源代理 voxl 的 HTTP 与 WebSocket
+- dudu 以 `/api/bots/:botId/computer/live/` 同源代理 voxl 的 HTTP 与 WebSocket
 - 浏览器需要 **HTTPS 或 localhost** 才能使用 WebCodecs 解码电脑画面
 
 ## 远程访问
 
 - 推荐通过 HTTPS 反向代理访问 dudu；如果使用 frp，请同时转发 HTTP 和 WebSocket，并保持同一源
 - 电脑流已经走 dudu 同一端口，不需要额外开放 voxl 端口
-- 独立调试用的 botd 只应监听 loopback
 - 自签证书需要浏览器信任，否则部分浏览器能力（如 WebCodecs）可能不可用
 
 ## CLI
@@ -179,8 +178,6 @@ bun src/cli.ts events list
 bun src/cli.ts events register '{"id":"wake-alice","botId":"alice","kind":"interval","enabled":true,"priority":"low","payload":{"task":"检查任务"},"intervalMs":60000}'
 bun src/cli.ts events trigger wake-alice
 bun src/cli.ts events disable wake-alice
-bun src/botd/main.ts --help
-# 单文件版本：./release/dudu botd --help
 ```
 
 `DUDU_URL` 指定服务地址，`DUDU_TOKEN` 指定 Bearer token。

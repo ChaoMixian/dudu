@@ -36,7 +36,7 @@ bun run build:binary
 ./release/dudu
 ```
 
-Desktop sessions are managed directly by a supervisor inside the dudu process; no separate botd process is required. `dudu botd serve` is kept only for standalone debugging and scripting.
+Desktop sessions are managed directly by a supervisor inside the dudu process; no separate botd process is required.
 
 The process that starts dudu must be able to find `voxl` on `PATH` (it is usually installed by `cargo install voxl-server` into `~/.cargo/bin`). For example:
 
@@ -48,7 +48,7 @@ The single-file binary works the same way; it only removes the need for Node and
 
 Default address: http://127.0.0.1:7331
 
-The standalone debugging botd listens on loopback only. It shares the workspace desktop lock with the main process, so it cannot run while dudu owns that workspace. Do not expose it directly to the network; production deployments should expose dudu through an HTTPS reverse proxy.
+Desktop sessions are owned by the dudu process and never expose a separate botd HTTP port. Production deployments should expose dudu through an HTTPS reverse proxy.
 
 ## Workspace
 
@@ -144,7 +144,7 @@ Bot-to-Bot protections:
 
 - Bot events are coalesced in a one-second window; idle Bots receive them as one sequence-ordered batch
 - Each Bot pair allows at most 20 automatic messages since the last human message
-- After that limit, messages are still stored and shown in the thread, but no longer wake the peer
+- After that limit, messages are still stored and shown in the thread. They no longer wake the peer immediately, but are included in its next digest
 - `message_send` results and incoming Bot events include `remaining`; at 0, the Bot is told to stop and ask the human
 - A human message to either Bot resets the budget for that pair
 
@@ -155,18 +155,17 @@ Connectors are shared across the workspace. Every Bot can use them directly; no 
 Bot desktops need no service URL. Each Bot gets its own desktop:
 
 - A supervisor inside the dudu process starts Xvfb and the desktop session
-- Agent computer tools are in-process `local` connectors; no MCP subprocess or HTTP hop
+- Agent computer tools are a built-in dudu capability that calls `Computer.cua()` directly; no connector, MCP subprocess, or HTTP hop
 - **Settings → Connectors → Start desktops on launch** controls whether dudu restores all desktops at startup (on by default)
 - Even with that setting off, the first computer tool call starts the Bot's stopped desktop
 - Bots can also call `computer__status`, `computer__start`, and `computer__stop` directly
-- dudu proxies voxl HTTP and WebSocket through `/api/bots/:botId/computers/:bindingId/live/`
+- dudu proxies voxl HTTP and WebSocket through `/api/bots/:botId/computer/live/`
 - Browsers need **HTTPS or localhost** for WebCodecs to decode the computer stream
 
 ## Remote access
 
 - Prefer an HTTPS reverse proxy for dudu. If using frp, forward both HTTP and WebSocket and keep them same-origin
 - The computer stream already uses dudu's own port; no extra voxl port needs to be exposed
-- The standalone debugging botd should listen on loopback only
 - Self-signed certificates must be trusted by the browser; otherwise some capabilities (such as WebCodecs) may not work
 
 ## CLI
@@ -179,8 +178,6 @@ bun src/cli.ts events list
 bun src/cli.ts events register '{"id":"wake-alice","botId":"alice","kind":"interval","enabled":true,"priority":"low","payload":{"task":"check the task"},"intervalMs":60000}'
 bun src/cli.ts events trigger wake-alice
 bun src/cli.ts events disable wake-alice
-bun src/botd/main.ts --help
-# Single-file build: ./release/dudu botd --help
 ```
 
 `DUDU_URL` sets the server address; `DUDU_TOKEN` sets the Bearer token.

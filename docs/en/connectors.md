@@ -6,7 +6,7 @@
 
 `new ConnectorRegistry(workspaceRoot)` reads `connectors/<id>/connector.json` on demand. JSON files are the source of truth.
 
-Connectors are shared across the workspace. Every Bot can use them directly; no per-Bot binding is required. `computer` is the exception in one respect: the connector itself is shared, but every Bot has its own desktop and internal binding.
+Connectors are shared across the workspace. Every Bot can use them directly; no per-Bot binding is required. `computer` is not a connector: it is a built-in dudu capability, and every Bot owns its desktop.
 
 Connector definition:
 
@@ -27,7 +27,7 @@ Connector definition:
 }
 ```
 
-`transport` supports `command`, `http`, `mcp`, and `local`. `local` is reserved for built-in connectors whose tools run inside the dudu process. Connector configuration is operator input, not model-generated arguments. Do not register untrusted executables or URLs. These adapters are not OS sandboxes.
+`transport` supports only `command`, `http`, and `mcp`. Connector configuration is operator input, not model-generated arguments. Do not register untrusted executables or URLs. These adapters are not OS sandboxes.
 
 ## Command
 
@@ -76,11 +76,11 @@ Missed interval/cron ticks coalesce into at most one run per tick. The goal is t
 
 Available methods: `list`, `get`, `register`, `enable`, `remove`, `trigger`, `tick`, `start`, `stop`.
 
-## Built-in computer connector
+## Built-in computer capability
 
-`computer` is registered at startup as a built-in connector with `transport: "local"`. Agents call `Computer.cua()` directly, and a supervisor inside the dudu process operates the current Bot's desktop. There is no MCP subprocess, no botd HTTP client, and no token.
+`computer` is not a connector and is not written under `connectors/`. Every Bot has a built-in computer and its own desktop; agents call `Computer.cua()` directly, and a supervisor inside the dudu process operates that desktop. There is no MCP subprocess, no botd HTTP client, and no token.
 
-Desktops are still hosted by external processes (Xvfb, xfce, voxl). `dudu botd serve` remains only as a standalone debugging backend.
+Desktops are still hosted by external processes (Xvfb, xfce, voxl), but there is no separate botd daemon.
 
 Tool surface:
 
@@ -97,7 +97,7 @@ Tool surface:
 
 Capabilities without a reliable X11 equivalent are not implemented (mobile gestures, app-store install, CDP browser tools, audio, and so on).
 
-HTTP callers can also use `POST /v1/desktops/:id/cua/<method>`; `BotdClient.cua(id, method, args)` is a convenience wrapper.
+The computer capability is used inside the dudu process; there is no separate botd HTTP desktop API.
 
 ## Tests
 

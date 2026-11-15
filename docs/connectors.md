@@ -6,7 +6,7 @@
 
 `new ConnectorRegistry(workspaceRoot)` 按需读取 `connectors/<id>/connector.json`，JSON 文件是唯一真相。
 
-连接器对整个工作区共享，所有 Bot 都能直接使用，不需要逐个 Bot 绑定。`computer` 是例外：连接器本身共享，但每个 Bot 自动拥有自己的桌面和内部绑定。
+连接器对整个工作区共享，所有 Bot 都能直接使用，不需要逐个 Bot 绑定。`computer` 不是连接器，而是 dudu 的内置能力：每个 Bot 自动拥有自己的桌面。
 
 连接器定义：
 
@@ -27,7 +27,7 @@
 }
 ```
 
-`transport` 支持 `command`、`http`、`mcp`、`local`。`local` 仅由内置连接器使用，工具在 dudu 进程内执行。连接器配置是运维输入，不是模型生成的参数；不要注册不受信任的可执行文件或 URL。这些适配器不是 OS 沙箱。
+`transport` 只支持 `command`、`http`、`mcp`。连接器配置是运维输入，不是模型生成的参数；不要注册不受信任的可执行文件或 URL。这些适配器不是 OS 沙箱。
 
 ## Command
 
@@ -76,11 +76,11 @@ MCP 客户端的环境和生命周期遵循官方实现。
 
 可用方法：`list`、`get`、`register`、`enable`、`remove`、`trigger`、`tick`、`start`、`stop`。
 
-## 内置 computer 连接器
+## 内置电脑能力
 
-`computer` 在启动时注册为 `transport: "local"` 的内置连接器。Agent 直接调用 `Computer.cua()`，由 dudu 进程内的 supervisor 操作当前 Bot 的桌面；没有 MCP 子进程、没有 botd HTTP 客户端、也不需要 token。
+`computer` 不是连接器，也不写入 `connectors/`。每个 Bot 都有内置的电脑能力和独立桌面；Agent 直接调用 `Computer.cua()`，由 dudu 进程内的 supervisor 操作当前 Bot 的桌面。没有 MCP 子进程、没有 botd HTTP 客户端，也不需要 token。
 
-桌面仍由外部进程承载（Xvfb、xfce、voxl）；`dudu botd serve` 只保留为独立调试后端。
+桌面仍由外部进程承载（Xvfb、xfce、voxl），但不再提供独立的 botd 守护进程。
 
 工具面覆盖：
 
@@ -97,7 +97,7 @@ MCP 客户端的环境和生命周期遵循官方实现。
 
 不实现没有可靠 X11 等价物的能力（移动端手势、应用商店安装、CDP 浏览器工具、音频等）。
 
-HTTP 调用方也可使用 `POST /v1/desktops/:id/cua/<method>`；`BotdClient.cua(id, method, args)` 是便捷封装。
+电脑能力只在 dudu 进程内使用，不提供独立的 botd HTTP 桌面 API。
 
 ## 测试
 

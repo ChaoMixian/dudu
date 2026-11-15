@@ -21,10 +21,11 @@ dudu treats Bots as long-lived collaborators rather than one-off chat windows. A
 - **Persistent identity and memory** — each Bot has its own `AGENTS.md`, `MEMORY.md`, working directory, and Pi session.
 - **Proactive communication** — normal messages, questions with options, emoji reactions, file attachments, and computer takeover requests.
 - **Independent computer** — each Bot owns a desktop that is restored when dudu starts; Bots can also start, stop, and inspect it themselves. The web UI lets you watch and take over.
-- **Bot collaboration** — Bots can message each other. The main timeline shows notices, and clicking one opens the full history.
+- **Bot collaboration** — Bots can inspect the workspace directory (names, purposes, live status) and message each other. The main timeline shows notices, and clicking one opens the full history.
 - **Events and automation** — cron, fixed intervals, process output, and webhooks. Idle Bots receive backlog as one ordered batch.
 - **Model freedom** — configure providers and models graphically, set a workspace default, and switch per conversation.
 - **Shared connectors** — HTTP, command, and MCP connectors are configured once and shared by every Bot.
+- **Profile** — set your nickname and avatar. Pick from random DiceBear styles and presets, or upload your own image.
 - **Local data** — configuration, memory, files, and sessions all live in the workspace.
 
 Full Bot-to-Bot history:
@@ -56,7 +57,7 @@ bun run build:binary
 ./release/dudu
 ```
 
-`release/dudu` embeds the frontend. `dudu botd serve` remains available as a standalone loopback debugging backend.
+`release/dudu` embeds the frontend and runs as a single file.
 
 ### First run
 
