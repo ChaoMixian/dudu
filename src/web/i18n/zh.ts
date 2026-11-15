@@ -80,7 +80,7 @@ export const zh = {
   status: { idle: '空闲', running: '运行中', paused: '已暂停', error: '错误', live: '实时', connecting: '连接中', reconnecting: '重连中', liveUnavailable: '实时更新不可用', refresh: '刷新', pending: '待处理 {n}' },
   message: { accepted: '已受理', sent: '已送达', failed: '失败', you: '你', send: '发送', sending: '发送中…', composer: '发送给 {name}，Enter 发送，Shift+Enter 换行', composerEmpty: '输入消息…', notice: '消息立即送达时间线；Bot 只通过 message_send 工具回复。',
     reactions: '回应', askPlaceholder: '自己输入回答…', askSubmit: '发送回答', takeoverTitle: '电脑接管', takeoverHint: '打开实时桌面，直接查看和操作这台电脑。', takeoverOpen: '接管电脑',
-    reply: '回复', replyPlaceholder: '回复…', copy: '复制', copyRequestId: '复制请求 ID', emojiTitle: '表情', emojiSearch: '搜索表情符号', thinking: '正在思考…', replyingTo: '回复 {name}', reactToggle: '添加或取消回应', downloadFile: '下载附件', attachmentFailed: '附件加载失败', botThreads: '机器人对话', sentTo: '已发消息给 {name}', receivedFrom: '消息来自 {name}', threadEmpty: '还没有消息往来', closeThread: '关闭聊天' },
+    reply: '回复', replyPlaceholder: '回复…', copy: '复制', copyRequestId: '复制请求 ID', emojiTitle: '表情', emojiSearch: '搜索表情符号', thinking: '正在思考', replyingTo: '回复 {name}', reactToggle: '添加或取消回应', downloadFile: '下载附件', attachmentFailed: '附件加载失败', botThreads: '机器人对话', sentTo: '已发消息给 {name}', receivedFrom: '消息来自 {name}', threadEmpty: '还没有消息往来', closeThread: '关闭聊天' },
   overview: {
     bots: 'Bot', running: '运行中', idleCount: '{n} 空闲', pendingInputs: '待处理输入', pendingHint: '所有 Bot 收件箱合计',
     sourcesConnectors: '事件源 / 连接器', botList: 'Bot', recent: '最近消息', noMessages: '还没有消息。打开一个 Bot 发送第一条消息。',

@@ -896,7 +896,6 @@ body {
   padding: 10px 14px;
   font-size: 13.5px;
   line-height: 1.65;
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
@@ -933,40 +932,135 @@ body {
   max-width: 100%;
 }
 
-.chat-bubble-wrap.has-reactions {
-  padding-top: 14px;
+.chat-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-markdown > :first-child { margin-top: 0; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+
+.chat-markdown p { margin: 0.4em 0; }
+.chat-markdown h1, .chat-markdown h2, .chat-markdown h3, .chat-markdown h4, .chat-markdown h5, .chat-markdown h6 {
+  margin: 0.9em 0 0.4em;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.chat-markdown h1 { font-size: 1.3em; }
+.chat-markdown h2 { font-size: 1.18em; }
+.chat-markdown h3 { font-size: 1.08em; }
+.chat-markdown h4, .chat-markdown h5, .chat-markdown h6 { font-size: 1em; }
+
+.chat-markdown ul, .chat-markdown ol { margin: 0.45em 0; padding-left: 1.35em; }
+.chat-markdown li { margin: 0.15em 0; }
+.chat-markdown li > p { margin: 0; }
+.chat-markdown .contains-task-list { padding-left: 0; }
+.chat-markdown .task-list-item { list-style: none; }
+
+.chat-markdown code {
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  padding: 0.12em 0.35em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+.chat-markdown pre {
+  margin: 0.6em 0;
+  overflow-x: auto;
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.chat-markdown pre code {
+  background: none;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.chat-markdown blockquote {
+  margin: 0.6em 0;
+  border-left: 2px solid var(--separator);
+  padding: 0.1em 0 0.1em 0.8em;
+  color: var(--muted);
+}
+.chat-markdown a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.chat-markdown hr { margin: 0.8em 0; border: 0; border-top: 1px solid var(--separator); }
+.chat-markdown img { max-width: 100%; border-radius: 8px; }
+
+.chat-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.6em 0;
+  border-collapse: collapse;
+}
+.chat-markdown th, .chat-markdown td {
+  border: 1px solid var(--separator);
+  padding: 5px 8px;
+  text-align: left;
+}
+.chat-markdown th { background: var(--surface); font-weight: 600; }
+
+.chat-bubble-wrap[data-react-side="left"].has-reactions .chat-bubble {
+  -webkit-mask-image: radial-gradient(circle 20px at -10px calc(100% - 21px), transparent 19px, #000 20px);
+  mask-image: radial-gradient(circle 20px at -10px calc(100% - 21px), transparent 19px, #000 20px);
+}
+
+.chat-bubble-wrap[data-react-side="right"].has-reactions .chat-bubble {
+  -webkit-mask-image: radial-gradient(circle 20px at calc(100% + 10px) calc(100% - 21px), transparent 19px, #000 20px);
+  mask-image: radial-gradient(circle 20px at calc(100% + 10px) calc(100% - 21px), transparent 19px, #000 20px);
 }
 
 .message-reactions {
   position: absolute;
-  top: 0;
-  left: 8px;
+  bottom: 5px;
+  left: -26px;
   z-index: 2;
   display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-bubble-wrap[data-react-side="right"] .message-reactions {
+  right: -26px;
+  left: auto;
+  flex-direction: row-reverse;
 }
 
 .message-reaction {
   display: inline-flex;
+  min-width: 32px;
+  height: 32px;
   align-items: center;
+  justify-content: center;
   gap: 3px;
-  border: 1px solid var(--separator);
+  border: 0;
   border-radius: 999px;
-  background: var(--overlay);
-  padding: 2px 6px;
-  font-size: 14px;
-  line-height: 1.4;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+  background: var(--surface);
+  padding: 0 5px;
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+  transition: background-color 120ms ease, transform 120ms ease;
 }
 
 button.message-reaction {
   cursor: pointer;
 }
 
-.message-reaction[data-mine="true"] {
-  border-color: color-mix(in oklab, var(--accent) 70%, var(--separator));
-  box-shadow: 0 0 0 1px var(--accent), 0 2px 6px rgb(0 0 0 / 0.18);
+button.message-reaction:hover {
+  background: var(--surface-hover);
+}
+
+button.message-reaction:active {
+  transform: scale(0.96);
+}
+
+button.message-reaction:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .message-reaction-count {
@@ -1133,8 +1227,56 @@ button.message-reaction {
 
 .typing-row {
   display: flex;
+  align-items: center;
+  gap: 8px;
   justify-content: flex-start;
   margin-top: 12px;
+}
+
+.typing-activity {
+  min-width: 0;
+  max-width: min(60vw, 320px);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .typing-activity {
+    background-color: var(--muted);
+    background-image: linear-gradient(100deg,
+      var(--muted) 0%,
+      var(--muted) 34%,
+      color-mix(in oklab, var(--foreground) 48%, var(--muted)) 46%,
+      color-mix(in oklab, var(--foreground) 72%, var(--muted)) 50%,
+      color-mix(in oklab, var(--foreground) 48%, var(--muted)) 54%,
+      var(--muted) 66%,
+      var(--muted) 100%);
+    background-repeat: no-repeat;
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: activity-shimmer 3.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+}
+
+@keyframes activity-shimmer {
+  0% { background-position: 100% 0; }
+  55%, 100% { background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-activity {
+    animation: none;
+    background: none;
+    color: var(--muted);
+    -webkit-text-fill-color: currentColor;
+  }
 }
 
 .typing-bubble {
@@ -1201,7 +1343,9 @@ button.message-reaction {
 .message-menu {
   position: fixed;
   z-index: 90;
-  width: 260px;
+  width: max-content;
+  min-width: 196px;
+  max-width: min(260px, calc(100vw - 16px));
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--overlay);
@@ -1220,8 +1364,8 @@ button.message-reaction {
 
 .message-menu-emoji {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border-radius: 8px;
   font-size: 18px;
@@ -1234,7 +1378,7 @@ button.message-reaction {
 }
 
 .message-menu-more {
-  margin-left: auto;
+  margin-left: 4px;
   color: var(--muted);
 }
 
@@ -1245,58 +1389,10 @@ button.message-reaction {
   gap: 10px;
   border-radius: 8px;
   padding: 8px 9px;
-  align-items: center;
-  gap: 8px;
   color: var(--foreground);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-.typing-activity {
-  min-width: 0;
-  max-width: min(60vw, 320px);
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .typing-activity {
-    background-color: var(--muted);
-    background-image: linear-gradient(100deg,
-      var(--muted) 0%,
-      var(--muted) 34%,
-      color-mix(in oklab, var(--foreground) 48%, var(--muted)) 46%,
-      color-mix(in oklab, var(--foreground) 72%, var(--muted)) 50%,
-      color-mix(in oklab, var(--foreground) 48%, var(--muted)) 54%,
-      var(--muted) 66%,
-      var(--muted) 100%);
-    background-repeat: no-repeat;
-    background-size: 240% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    animation: activity-shimmer 3.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  }
-}
-
-@keyframes activity-shimmer {
-  0% { background-position: 100% 0; }
-  55%, 100% { background-position: 0% 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .typing-activity {
-    animation: none;
-    background: none;
-    color: var(--muted);
-    -webkit-text-fill-color: currentColor;
-  }
-}
-
 }
 
 .message-menu-action:hover {
@@ -1571,7 +1667,8 @@ button.message-reaction {
   overflow: hidden;
   border: 2px solid transparent;
   border-radius: 50%;
-  background: var(--surface);
+  background: color-mix(in oklab, var(--surface-secondary) 72%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--separator);
   padding: 0;
   cursor: pointer;
   transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
@@ -1636,8 +1733,7 @@ button.message-reaction {
   gap: 10px;
   border: 1px solid var(--separator);
   border-radius: 16px;
-  background: color-mix(in oklab, var(--surface-secondary) 72%, var(--surface));
-  box-shadow: inset 0 0 0 1px var(--separator);
+  background: var(--surface);
   padding: 12px;
   text-align: left;
   cursor: pointer;

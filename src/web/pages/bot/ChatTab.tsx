@@ -1,5 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import Markdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import { Button, Dropdown, Spinner, TextArea, TextField, Tooltip } from '@heroui/react';
 import { useNavigate } from 'react-router-dom';
 import type { BotConfig } from '../../../contracts';
@@ -28,9 +31,6 @@ const previewText = (message: Message) => message.text || message.attachments?.m
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear()
   && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTabProps) {
-  const { state, run, busy } = useLive();
-  const { token } = useAuth();
 function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; toolName?: string; startedAt?: string }) {
   const { t } = useI18n();
   const [now, setNow] = useState(() => Date.now());
@@ -60,6 +60,9 @@ function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; t
   );
 }
 
+export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTabProps) {
+  const { state, run, busy } = useLive();
+  const { token } = useAuth();
   const { t, locale } = useI18n();
   const navigate = useNavigate();
   const palette = botColor(bot.color, bot.name);
@@ -87,12 +90,12 @@ function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; t
     .sort((a, b) => a.seq - b.seq), [state.messages, bot.id]);
   const messages = useMemo(() => conversation.filter(message => message.kind !== 'reaction'), [conversation]);
   const reactions = useMemo(() => {
-    const byTarget = new Map<string, Map<string, { count: number; mine: boolean }>>();
+    const byTarget = new Map<string, Map<string, { count: number }>>();
     for (const message of conversation) {
       if (message.kind !== 'reaction' || !message.targetId || !message.emoji) continue;
-      const counts = byTarget.get(message.targetId) ?? new Map<string, { count: number; mine: boolean }>();
-      const current = counts.get(message.emoji) ?? { count: 0, mine: false };
-      counts.set(message.emoji, { count: current.count + 1, mine: current.mine || message.sender === 'user' });
+      const counts = byTarget.get(message.targetId) ?? new Map<string, { count: number }>();
+      const current = counts.get(message.emoji) ?? { count: 0 };
+      counts.set(message.emoji, { count: current.count + 1 });
       byTarget.set(message.targetId, counts);
     }
     return new Map([...byTarget].map(([target, counts]) => [target, [...counts].map(([emoji, value]) => ({ emoji, ...value }))]));
@@ -330,12 +333,12 @@ function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; t
                   {separates && <div className="my-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted"><time dateTime={message.createdAt}>{timestamp(date)}</time></div>}
                   <div className={`flex ${own ? 'justify-end' : 'justify-start'} ${consecutive ? 'mt-1.5' : 'mt-4'}`}>
                     <div className={`flex min-w-0 max-w-[82%] flex-col gap-1.5 ${own ? 'items-end' : 'items-start'}`}>
-                      <div className={`chat-bubble-wrap ${messageReactions?.length ? 'has-reactions' : ''}`} onContextMenu={event => openMenu(event, message)}>
+                      <div className={`chat-bubble-wrap ${messageReactions?.length ? 'has-reactions' : ''}`} data-react-side={own ? 'left' : 'right'} onContextMenu={event => openMenu(event, message)}>
                         {!!messageReactions?.length && (
                           <div className="message-reactions" aria-label={t('message.reactions')}>
-                            {messageReactions.map(({ emoji, count, mine }) => canReact
-                              ? <button key={emoji} type="button" className="message-reaction" data-mine={mine ? 'true' : undefined} title={t('message.reactToggle')} onClick={() => void toggleReaction(message, emoji)}>{emoji}{count > 1 && <span className="message-reaction-count">{count}</span>}</button>
-                              : <span key={emoji} className="message-reaction" data-mine={mine ? 'true' : undefined}>{emoji}{count > 1 && <span className="message-reaction-count">{count}</span>}</span>)}
+                            {messageReactions.map(({ emoji, count }) => canReact
+                              ? <button key={emoji} type="button" className="message-reaction" title={t('message.reactToggle')} onClick={() => void toggleReaction(message, emoji)}>{emoji}{count > 1 && <span className="message-reaction-count">{count}</span>}</button>
+                              : <span key={emoji} className="message-reaction">{emoji}{count > 1 && <span className="message-reaction-count">{count}</span>}</span>)}
                           </div>
                         )}
                         <div
@@ -344,7 +347,9 @@ function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; t
                           title={timestamp(date)}
                         >
                           {replied && <div className="reply-quote"><span>{replied.sender === bot.id ? bot.name : t('message.you')}</span><p>{previewText(replied).slice(0, 160)}</p></div>}
-                          {message.text && <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed [overflow-wrap:anywhere]">{message.text}</p>}
+                          {message.text && (own
+                            ? <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed [overflow-wrap:anywhere]">{message.text}</p>
+                            : <div className="chat-markdown text-[14.5px] leading-relaxed"><Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{message.text}</Markdown></div>)}
                           <MessageAttachments attachments={message.attachments} />
                         </div>
                       </div>
@@ -486,7 +491,7 @@ function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; t
           className="message-menu"
           role="menu"
           style={{
-            left: Math.max(8, Math.min(menu.x, window.innerWidth - 268)),
+            left: Math.max(8, Math.min(menu.x, window.innerWidth - 264)),
             top: Math.max(8, Math.min(menu.y, window.innerHeight - (menu.message.sender === bot.id ? 310 : 210))),
           }}
         >

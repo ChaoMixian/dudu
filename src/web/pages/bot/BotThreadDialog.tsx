@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Modal, Spinner } from '@heroui/react';
+import Markdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import type { BotConfig, BotThreadMessage } from '../../../contracts';
 import { errorText, request, segment } from '../../lib/api';
 import { useAuth } from '../../auth/AuthContext';
@@ -57,7 +60,7 @@ export default function BotThreadDialog({ bot, peer, isOpen, onOpenChange }: { b
                   <div className="bot-thread-sender-row"><span className="bot-thread-sender" style={{ color: palette.background }}>{sender?.name ?? message.from}</span></div>
                   <div className="bot-thread-message-row">
                     <BotAvatar name={sender?.name ?? message.from} avatar={sender?.avatar} color={sender?.color} size="xs" />
-                    <div className="bot-thread-bubble">{message.text}</div>
+                    <div className="bot-thread-bubble chat-markdown"><Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{message.text}</Markdown></div>
                   </div>
                 </div>;
               })}
