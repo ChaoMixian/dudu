@@ -50,7 +50,7 @@ export class SourceManager {
   private dirs(path: string): string[] { try { return readdirSync(path, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name); } catch (error: any) { if (error.code === 'ENOENT') return []; throw error; } }
   get(sourceId: string) { id(sourceId); const source = this.list().find(s => s.id === sourceId); if (!source) throw new Error(`Unknown source: ${sourceId}`); return source; }
   private configChanged(source: SourceConfig, action: string) {
-    try { const result = this.submit({ botId: source.botId, sourceId: 'source:config', type: 'source.changed', payload: { action, sourceId: source.id, enabled: source.enabled }, wake: false }); if (result instanceof Promise) void result.catch(error => this.log(source.id, 'error', `config event failed: ${error}`)); }
+    try { const result = this.submit({ botId: source.botId, sourceId: 'source:config', type: 'source.changed', payload: { action, sourceId: source.id, enabled: source.enabled, kind: source.kind, type: source.type }, delivery: 'digest' }); if (result instanceof Promise) void result.catch(error => this.log(source.id, 'error', `config event failed: ${error}`)); }
     catch (error) { this.log(source.id, 'error', `config event failed: ${error}`); }
   }
   register(value: SourceConfig): SourceConfig {
