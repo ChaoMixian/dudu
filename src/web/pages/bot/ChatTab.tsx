@@ -31,6 +31,35 @@ const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear()
 export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTabProps) {
   const { state, run, busy } = useLive();
   const { token } = useAuth();
+function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; toolName?: string; startedAt?: string }) {
+  const { t } = useI18n();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [summary, toolName, startedAt]);
+  const label = summary || (!toolName ? t('message.thinking')
+    : toolName === 'bash' ? t('activity.command')
+    : toolName === 'read' ? t('activity.reading')
+    : toolName === 'write' || toolName === 'edit' ? t('activity.writing')
+    : toolName === 'grep' || toolName === 'find' || toolName === 'ls' ? t('activity.searching')
+    : toolName === 'message_send' ? t('activity.replying')
+    : toolName === 'environment' ? t('activity.environment')
+    : toolName === 'events_manage' ? t('activity.events')
+    : toolName.startsWith('computer__') ? t('activity.computer')
+    : toolName.includes('__') ? t('activity.connector', { name: toolName.split('__')[0]! })
+    : t('activity.tool', { name: toolName }));
+  const seconds = startedAt ? Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000)) : 0;
+  const text = `${label}${seconds >= 5 ? ` · ${seconds}s` : ''}`;
+  return (
+    <div className="typing-row">
+      <div className="typing-bubble" aria-label={text}><span /><span /><span /></div>
+      <span className="typing-activity" title={text}>{text}</span>
+    </div>
+  );
+}
+
   const { t, locale } = useI18n();
   const navigate = useNavigate();
   const palette = botColor(bot.color, bot.name);
@@ -72,7 +101,11 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTa
   const lastUserSeq = useMemo(() => messages.reduce((latest, message) => message.sender === 'user' ? Math.max(latest, message.seq) : latest, 0), [messages]);
   const threads = useMemo(() => (state.botThreads ?? []).filter(thread => thread.botId === bot.id && thread.peerId !== bot.id && state.bots.some(entry => entry.id === thread.peerId)), [state.botThreads, state.bots, bot.id]);
   const peerFor = (peerId: string | undefined) => peerId ? state.bots.find(entry => entry.id === peerId) : undefined;
-  const thinking = state.statuses.find(entry => entry.botId === bot.id)?.state === 'running';
+  const botStatus = state.statuses.find(entry => entry.botId === bot.id);
+  const thinking = botStatus?.state === 'running';
+  const activitySummary = botStatus?.activity?.summary;
+  const activityTool = botStatus?.activity?.toolName;
+  const activityStartedAt = botStatus?.activity?.startedAt;
   const replyMessage = replyTo ? messageById.get(replyTo) : undefined;
   const sendDisabled = !text.trim() || sending || Boolean(busy);
   const modelChoices = useMemo(() => state.providers.flatMap(provider => provider.models.map(model => ({
@@ -257,7 +290,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTa
               <BotAvatar name={bot.name} avatar={bot.avatar} color={bot.color} size="lg" />
               <h2 className="text-xl font-semibold tracking-tight">{bot.name}</h2>
               <p className="text-sm text-muted">{bot.description || t('bot.emptyChat', { name: bot.name })}</p>
-              {thinking && <div className="typing-bubble" aria-label={t('message.thinking')}><span /><span /><span /></div>}
+              {thinking && <TypingIndicator summary={activitySummary} toolName={activityTool} startedAt={activityStartedAt} />}
             </div>
           </div>
         ) : (
@@ -362,7 +395,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers }: ChatTa
                 </Fragment>
               );
             })}
-            {thinking && <div className="typing-row"><div className="typing-bubble" aria-label={t('message.thinking')}><span /><span /><span /></div></div>}
+            {thinking && <TypingIndicator summary={activitySummary} toolName={activityTool} startedAt={activityStartedAt} />}
           </div>
         )}
       </div>

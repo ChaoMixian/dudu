@@ -29,7 +29,21 @@ export const zh = {
     nameRequired: '请输入 Bot 名称。', modelRequired: '请选择提供商和模型。',
     saving: '正在保存…', saveFailed: '保存失败，请检查错误提示后重试。',
   },
-  nav: { overview: '总览', connectors: '连接器', sources: '事件源', providers: '模型服务', computers: '电脑', settings: '设置', newBot: '新建', language: '语言', appearance: '外观', about: '关于' },
+  nav: { overview: '总览', connectors: '连接器', sources: '事件源', providers: '模型服务', computers: '电脑', settings: '设置', newBot: '新建', language: '语言', appearance: '外观', about: '关于', profile: '个人资料' },
+  profile: {
+    title: '个人资料', desc: '设置你在 dudu 里显示的名字和头像。',
+    defaultName: '我', name: '昵称', namePlaceholder: '你的名字',
+    avatar: '头像', avatarHint: '选择一个 DiceBear 随机头像，或上传自己的图片。',
+    style: '头像风格', preset: '预设', upload: '上传图片', remove: '移除头像',
+    save: '保存', saved: '个人资料已保存', uploadError: '无法读取图片，请选择 PNG、JPEG 或 WebP。',
+    menu: '个人资料',
+  },
+  avatarPreset: { classic: '经典', minimal: '简约', animated: '动态', still: '静态', round: '圆形', square: '方形', happy: '开心', smiling: '微笑', love: '爱心' },
+  activity: {
+    reading: '正在读取文件', writing: '正在写入文件', command: '正在执行命令', searching: '正在查找资料',
+    replying: '正在整理回复', environment: '正在查看环境', events: '正在处理事件源',
+    computer: '正在操作电脑', connector: '正在调用 {name}', tool: '正在使用 {name}',
+  },
   appearance: {
     title: '外观', desc: '选择界面主题。跟随系统会随设备的深浅色设置自动切换。',
     light: '浅色', dark: '深色', system: '跟随系统', systemHint: '默认使用系统外观。',

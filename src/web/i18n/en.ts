@@ -31,7 +31,21 @@ export const en: Dictionary = {
     nameRequired: 'Enter a bot name.', modelRequired: 'Select a provider and model.',
     saving: 'Saving…', saveFailed: 'Save failed. Check the error and try again.',
   },
-  nav: { overview: 'Overview', connectors: 'Connectors', sources: 'Event sources', providers: 'Models', computers: 'Computers', settings: 'Settings', newBot: 'New', language: 'Language', appearance: 'Appearance', about: 'About' },
+  nav: { overview: 'Overview', connectors: 'Connectors', sources: 'Event sources', providers: 'Models', computers: 'Computers', settings: 'Settings', newBot: 'New', language: 'Language', appearance: 'Appearance', about: 'About', profile: 'Profile' },
+  profile: {
+    title: 'Profile', desc: 'Set the name and avatar shown in dudu.',
+    defaultName: 'Me', name: 'Nickname', namePlaceholder: 'Your name',
+    avatar: 'Avatar', avatarHint: 'Pick a random DiceBear avatar, or upload your own image.',
+    style: 'Avatar style', preset: 'Preset', upload: 'Upload image', remove: 'Remove avatar',
+    save: 'Save', saved: 'Profile saved', uploadError: 'Could not read the image. Choose a PNG, JPEG or WebP file.',
+    menu: 'Profile',
+  },
+  avatarPreset: { classic: 'Classic', minimal: 'Minimal', animated: 'Animated', still: 'Still', round: 'Round', square: 'Square', happy: 'Happy', smiling: 'Smiling', love: 'Love' },
+  activity: {
+    reading: 'Reading files', writing: 'Writing files', command: 'Running a command', searching: 'Searching',
+    replying: 'Preparing a reply', environment: 'Checking the workspace', events: 'Working with event sources',
+    computer: 'Using the computer', connector: 'Calling {name}', tool: 'Using {name}',
+  },
   appearance: {
     title: 'Appearance', desc: 'Choose a theme. System follows your device setting automatically.',
     light: 'Light', dark: 'Dark', system: 'System', systemHint: 'System appearance is the default.',

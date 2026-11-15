@@ -3,7 +3,7 @@ import type { BotConfig, BotThread, ConnectorDefinition, DesktopStatus, MessageA
 export type BotState = 'idle' | 'running' | 'paused' | 'error';
 export type MessageStatus = 'accepted' | 'sent' | 'failed';
 
-export interface BotStatus { botId: string; state: BotState; pending: number; error?: string }
+export interface BotStatus { botId: string; state: BotState; pending: number; error?: string; activity?: { summary?: string; toolName?: string; startedAt: string } }
 export interface Message {
   id: string; botId: string; conversationId: string; sender: string;
   text: string; kind: MessageKind; options?: string[]; targetId?: string; emoji?: string; replyTo?: string; attachments?: MessageAttachment[];
