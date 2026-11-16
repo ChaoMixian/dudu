@@ -7,7 +7,7 @@ export const zh = {
     expand: '展开', collapse: '收起', allChats: '查看全部', openSidebar: '展开侧边栏', closeSidebar: '收起侧边栏',
     unavailable: '此功能暂未接入', pin: '置顶', unpin: '取消置顶', messageTo: '消息 {name}', today: '今天', yesterday: '昨天',
     more: '更多操作', newChat: '新建机器人', addTools: '聊天工具', sendHint: '输入消息后发送', welcome: '有什么可以帮你？',
-    startChat: '向 {name} 发送消息，开始聊天。', jumpBottom: '回到最新消息',
+    startChat: '向 {name} 发送消息，开始聊天。', jumpBottom: '回到最新消息', resizeSidebar: '拖动调整侧边栏宽度',
   },
   ui2: {
     otherBots: '其他机器人', recentChats: '最近对话', workspace: '工作区', lightMode: '切换浅色', darkMode: '切换深色',
@@ -29,7 +29,7 @@ export const zh = {
     nameRequired: '请输入 Bot 名称。', modelRequired: '请选择提供商和模型。',
     saving: '正在保存…', saveFailed: '保存失败，请检查错误提示后重试。',
   },
-  nav: { overview: '总览', connectors: '连接器', sources: '事件源', providers: '模型服务', computers: '电脑', settings: '设置', newBot: '新建', language: '语言', appearance: '外观', about: '关于', profile: '个人资料' },
+  nav: { overview: '总览', connectors: '连接器', sources: '事件源', providers: '模型服务', computers: '电脑', settings: '设置', newBot: '新建', language: '语言', appearance: '外观', advanced: '高级', about: '关于', profile: '个人资料' },
   profile: {
     title: '个人资料', desc: '设置你在 dudu 里显示的名字和头像。',
     defaultName: '我', name: '昵称', namePlaceholder: '你的名字',
@@ -47,6 +47,44 @@ export const zh = {
   appearance: {
     title: '外观', desc: '选择界面主题。跟随系统会随设备的深浅色设置自动切换。',
     light: '浅色', dark: '深色', system: '跟随系统', systemHint: '默认使用系统外观。',
+  },
+  advanced: {
+    title: '高级模式', desc: '为调试和桌面操作打开额外工具。默认关闭，普通对话界面不会出现这些入口。',
+    enable: '高级工具', hint: '开启后在 Bot 标题栏和输入框菜单中显示右侧面板、文件、终端、Session 和电脑。', toggle: '启用高级模式',
+    note: '高级模式不是权限隔离；文件和终端仍以当前用户身份访问本机。',
+    saved: '高级模式已更新',
+  },
+  panel: {
+    title: '工具面板', files: '文件', terminal: '终端', session: 'Session', computer: '电脑', toggle: '打开工具面板',
+    newTab: '新标签页', open: '打开', startHint: '选择一个工具开始。', startNote: '文件、终端、Session 和电脑都只作用于当前 Bot。',
+    closeTab: '关闭标签页', collapse: '收起工具面板', resize: '拖动调整面板宽度', tabs: '标签页列表',
+    searchTabs: '搜索标签页…', openTabs: '打开的标签页', noTabs: '没有匹配的标签页',
+    justNow: '刚刚', minutes: '{n} 分', hours: '{n} 小时', days: '{n} 天',
+    filesDesc: '浏览工作区文件与附件。', terminalDesc: '在 Bot 的桌面环境中运行命令。', sessionDesc: '查看 agent 的实时会话与工具调用。', computerDesc: '查看和操作 Bot 的桌面。',
+  },
+  terminal: { connecting: '正在连接桌面…', closed: '连接已关闭', error: '终端连接失败', reconnect: '重新连接' },
+  session: {
+    reconnect: '重新连接',
+    empty: '还没有运行过。发送一条消息后，这里会显示 agent 的 session。',
+    you: '你', bot: 'Bot', system: 'system', thinking: '思考过程', args: '参数', result: '结果', inputEvent: '输入事件',
+    usage: '{input} in · {output} out',
+    note: {
+      agent_start: '开始运行', agent_end: '运行结束', agent_settled: '本次运行结束',
+      compaction_start: '开始压缩上下文', compaction_end: '上下文压缩完成',
+      auto_retry_start: '自动重试', auto_retry_end: '重试结束',
+      model_change: '切换模型', thinking_level_change: '调整思考强度',
+    },
+  },
+  files: {
+    refresh: '刷新', newFolder: '新建文件夹', folderName: '文件夹名称', create: '创建', upload: '上传文件', empty: '暂无文件',
+    delete: '删除', deleteConfirm: '删除 {name}？', deleted: '已删除', uploaded: '文件已上传', folderCreated: '文件夹已创建',
+    nameRequired: '请输入有效的文件夹名称。', preview: '预览', download: '下载', tooLarge: '文件太大，无法内联预览；请下载查看。',
+    noPreview: '此文件类型不支持预览。', selectPreview: '选择一个文件预览。', resizeList: '拖动调整文件列表宽度',
+    closeFile: '关闭文件', source: '查看源码', rendered: '预览文档', openHint: '单击预览，双击固定',
+  },
+  composer: {
+    upload: '上传文件', uploading: '正在上传…', drop: '松开即可上传', remove: '移除 {name}', limit: '最多只能附加 8 个文件。',
+    tooLarge: '{name} 超过 50 MiB，无法上传。',
   },
   about: {
     title: '关于', desc: '当前加载的版本与构建信息。',
@@ -80,7 +118,7 @@ export const zh = {
   status: { idle: '空闲', running: '运行中', paused: '已暂停', error: '错误', live: '实时', connecting: '连接中', reconnecting: '重连中', liveUnavailable: '实时更新不可用', refresh: '刷新', pending: '待处理 {n}' },
   message: { accepted: '已受理', sent: '已送达', failed: '失败', you: '你', send: '发送', sending: '发送中…', composer: '发送给 {name}，Enter 发送，Shift+Enter 换行', composerEmpty: '输入消息…', notice: '消息立即送达时间线；Bot 只通过 message_send 工具回复。',
     reactions: '回应', askPlaceholder: '自己输入回答…', askSubmit: '发送回答', takeoverTitle: '电脑接管', takeoverHint: '打开实时桌面，直接查看和操作这台电脑。', takeoverOpen: '接管电脑',
-    reply: '回复', replyPlaceholder: '回复…', copy: '复制', copyRequestId: '复制请求 ID', emojiTitle: '表情', emojiSearch: '搜索表情符号', thinking: '正在思考', replyingTo: '回复 {name}', reactToggle: '添加或取消回应', downloadFile: '下载附件', attachmentFailed: '附件加载失败', botThreads: '机器人对话', sentTo: '已发消息给 {name}', receivedFrom: '消息来自 {name}', threadEmpty: '还没有消息往来', closeThread: '关闭聊天' },
+    reply: '回复', replyPlaceholder: '回复…', copy: '复制', selectText: '选择', copyRequestId: '复制请求 ID', emojiTitle: '表情', emojiSearch: '搜索表情符号', thinking: '正在思考', replyingTo: '回复 {name}', reactToggle: '添加或取消回应', downloadFile: '下载附件', attachmentFailed: '附件加载失败', botThreads: '机器人对话', sentTo: '已发消息给 {name}', receivedFrom: '消息来自 {name}', threadEmpty: '还没有消息往来', closeThread: '关闭聊天' },
   overview: {
     bots: 'Bot', running: '运行中', idleCount: '{n} 空闲', pendingInputs: '待处理输入', pendingHint: '所有 Bot 收件箱合计',
     sourcesConnectors: '事件源 / 连接器', botList: 'Bot', recent: '最近消息', noMessages: '还没有消息。打开一个 Bot 发送第一条消息。',

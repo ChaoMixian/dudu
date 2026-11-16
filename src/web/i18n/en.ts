@@ -9,7 +9,7 @@ export const en: Dictionary = {
     expand: 'Show more', collapse: 'Show less', allChats: 'View all', openSidebar: 'Open sidebar', closeSidebar: 'Close sidebar',
     unavailable: 'This feature is not connected yet', pin: 'Pin', unpin: 'Unpin', messageTo: 'Message {name}', today: 'Today', yesterday: 'Yesterday',
     more: 'More actions', newChat: 'New bot', addTools: 'Chat tools', sendHint: 'Type a message to send', welcome: 'How can I help you?',
-    startChat: 'Send a message to {name} to start chatting.', jumpBottom: 'Jump to latest message',
+    startChat: 'Send a message to {name} to start chatting.', jumpBottom: 'Jump to latest message', resizeSidebar: 'Drag to resize the sidebar',
   },
   ui2: {
     otherBots: 'Other bots', recentChats: 'Recent conversations', workspace: 'Workspace', lightMode: 'Switch to light', darkMode: 'Switch to dark',
@@ -31,7 +31,7 @@ export const en: Dictionary = {
     nameRequired: 'Enter a bot name.', modelRequired: 'Select a provider and model.',
     saving: 'Saving…', saveFailed: 'Save failed. Check the error and try again.',
   },
-  nav: { overview: 'Overview', connectors: 'Connectors', sources: 'Event sources', providers: 'Models', computers: 'Computers', settings: 'Settings', newBot: 'New', language: 'Language', appearance: 'Appearance', about: 'About', profile: 'Profile' },
+  nav: { overview: 'Overview', connectors: 'Connectors', sources: 'Event sources', providers: 'Models', computers: 'Computers', settings: 'Settings', newBot: 'New', language: 'Language', appearance: 'Appearance', advanced: 'Advanced', about: 'About', profile: 'Profile' },
   profile: {
     title: 'Profile', desc: 'Set the name and avatar shown in dudu.',
     defaultName: 'Me', name: 'Nickname', namePlaceholder: 'Your name',
@@ -49,6 +49,44 @@ export const en: Dictionary = {
   appearance: {
     title: 'Appearance', desc: 'Choose a theme. System follows your device setting automatically.',
     light: 'Light', dark: 'Dark', system: 'System', systemHint: 'System appearance is the default.',
+  },
+  advanced: {
+    title: 'Advanced mode', desc: 'Enable extra tools for debugging and desktop work. Off by default, so the normal chat stays simple.',
+    enable: 'Advanced tools', hint: 'When enabled, the Bot header and composer menu expose the right panel, files, terminal, Session, and computer.', toggle: 'Enable advanced mode',
+    note: 'Advanced mode is not a security boundary; files and the terminal still run as your user on this machine.',
+    saved: 'Advanced mode updated',
+  },
+  panel: {
+    title: 'Tool panel', files: 'Files', terminal: 'Terminal', session: 'Session', computer: 'Computer', toggle: 'Open tool panel',
+    newTab: 'New tab', open: 'Open', startHint: 'Choose a tool to get started.', startNote: 'Files, Terminal, Session, and Computer are scoped to the current Bot.',
+    closeTab: 'Close tab', collapse: 'Collapse tool panel', resize: 'Drag to resize the panel', tabs: 'Tab list',
+    searchTabs: 'Search tabs…', openTabs: 'Open tabs', noTabs: 'No matching tabs',
+    justNow: 'now', minutes: '{n}m', hours: '{n}h', days: '{n}d',
+    filesDesc: 'Browse workspace files and attachments.', terminalDesc: 'Run commands in the Bot desktop environment.', sessionDesc: 'Inspect the live agent session and tool calls.', computerDesc: 'View and operate the Bot desktop.',
+  },
+  terminal: { connecting: 'Connecting to the desktop…', closed: 'Connection closed', error: 'Terminal connection failed', reconnect: 'Reconnect' },
+  session: {
+    reconnect: 'Reconnect',
+    empty: 'No session yet. Send a message and the agent session will appear here.',
+    you: 'You', bot: 'Bot', system: 'system', thinking: 'Thinking', args: 'Arguments', result: 'Result', inputEvent: 'Input event',
+    usage: '{input} in · {output} out',
+    note: {
+      agent_start: 'Run started', agent_end: 'Run finished', agent_settled: 'Run settled',
+      compaction_start: 'Compacting context', compaction_end: 'Context compacted',
+      auto_retry_start: 'Retrying automatically', auto_retry_end: 'Retry finished',
+      model_change: 'Model changed', thinking_level_change: 'Thinking level changed',
+    },
+  },
+  files: {
+    refresh: 'Refresh', newFolder: 'New folder', folderName: 'Folder name', create: 'Create', upload: 'Upload files', empty: 'No files yet',
+    delete: 'Delete', deleteConfirm: 'Delete {name}?', deleted: 'Deleted', uploaded: 'Files uploaded', folderCreated: 'Folder created',
+    nameRequired: 'Enter a valid folder name.', preview: 'Preview', download: 'Download', tooLarge: 'This file is too large to preview inline. Download it instead.',
+    noPreview: 'This file type cannot be previewed.', selectPreview: 'Select a file to preview.', resizeList: 'Drag to resize the file list',
+    closeFile: 'Close file', source: 'View source', rendered: 'Preview document', openHint: 'Click to preview, double-click to keep open',
+  },
+  composer: {
+    upload: 'Upload files', uploading: 'Uploading…', drop: 'Drop to upload', remove: 'Remove {name}', limit: 'You can attach at most 8 files.',
+    tooLarge: '{name} is larger than 50 MiB and cannot be uploaded.',
   },
   about: {
     title: 'About', desc: 'Version and build loaded in this page.',
@@ -82,7 +120,7 @@ export const en: Dictionary = {
   status: { idle: 'Idle', running: 'Running', paused: 'Paused', error: 'Error', live: 'Live', connecting: 'Connecting', reconnecting: 'Reconnecting', liveUnavailable: 'Live updates unavailable', refresh: 'Refresh', pending: 'Pending {n}' },
   message: { accepted: 'Accepted', sent: 'Delivered', failed: 'Failed', you: 'You', send: 'Send', sending: 'Sending…', composer: 'Message {name}; Enter to send, Shift+Enter for newline', composerEmpty: 'Type a message…', notice: 'Messages land immediately; bots reply only via the message_send tool.',
     reactions: 'Reactions', askPlaceholder: 'Type your own answer…', askSubmit: 'Send answer', takeoverTitle: 'Computer takeover', takeoverHint: 'Open the live desktop and operate this computer directly.', takeoverOpen: 'Take over',
-    reply: 'Reply', replyPlaceholder: 'Reply…', copy: 'Copy', copyRequestId: 'Copy request ID', emojiTitle: 'Emoji', emojiSearch: 'Search emoji', thinking: 'Thinking', replyingTo: 'Replying to {name}', reactToggle: 'Add or remove reaction', downloadFile: 'Download attachment', attachmentFailed: 'Could not load attachment', botThreads: 'Bot conversations', sentTo: 'Message sent to {name}', receivedFrom: 'Message from {name}', threadEmpty: 'No messages yet', closeThread: 'Close chat' },
+    reply: 'Reply', replyPlaceholder: 'Reply…', copy: 'Copy', selectText: 'Select', copyRequestId: 'Copy request ID', emojiTitle: 'Emoji', emojiSearch: 'Search emoji', thinking: 'Thinking', replyingTo: 'Replying to {name}', reactToggle: 'Add or remove reaction', downloadFile: 'Download attachment', attachmentFailed: 'Could not load attachment', botThreads: 'Bot conversations', sentTo: 'Message sent to {name}', receivedFrom: 'Message from {name}', threadEmpty: 'No messages yet', closeThread: 'Close chat' },
   overview: {
     bots: 'Bots', running: 'Running', idleCount: '{n} idle', pendingInputs: 'Pending inputs', pendingHint: 'Across all bot inboxes',
     sourcesConnectors: 'Sources / connectors', botList: 'Bots', recent: 'Recent messages', noMessages: 'No messages yet. Open a bot and send the first one.',

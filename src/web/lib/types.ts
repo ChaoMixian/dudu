@@ -2,6 +2,9 @@ import type { BotConfig, BotThread, ConnectorDefinition, DesktopStatus, MessageA
 
 export type BotState = 'idle' | 'running' | 'paused' | 'error';
 export type MessageStatus = 'accepted' | 'sent' | 'failed';
+export type SideTab = 'files' | 'terminal' | 'session' | 'computer';
+export type PanelKind = 'start' | SideTab;
+export interface PanelTab { id: string; kind: PanelKind; createdAt: number; terminalPid?: number }
 
 export interface BotStatus { botId: string; state: BotState; pending: number; error?: string; activity?: { summary?: string; toolName?: string; startedAt: string } }
 export interface Message {
@@ -12,8 +15,8 @@ export interface Message {
 export interface Defaults { provider?: string; model?: string }
 export interface AppState {
   bots: BotConfig[]; connectors: ConnectorDefinition[]; sources: SourceConfig[];
-  providers: ProviderConfig[]; defaults: Defaults; autoStartComputers: boolean;
+  providers: ProviderConfig[]; defaults: Defaults; autoStartComputers: boolean; advancedMode: boolean;
   profile: UserProfile;
   statuses: BotStatus[]; messages: Message[]; botThreads: BotThread[]; desktops: DesktopStatus[];
 }
-export const EMPTY_STATE: AppState = { bots: [], connectors: [], sources: [], providers: [], defaults: {}, autoStartComputers: true, profile: {}, statuses: [], messages: [], botThreads: [], desktops: [] };
+export const EMPTY_STATE: AppState = { bots: [], connectors: [], sources: [], providers: [], defaults: {}, autoStartComputers: true, advancedMode: false, profile: {}, statuses: [], messages: [], botThreads: [], desktops: [] };

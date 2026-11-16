@@ -2,19 +2,11 @@ import { useEffect, useState } from 'react';
 import { Spinner } from '@heroui/react';
 import type { MessageAttachment } from '../../contracts';
 import { errorText, fetchBlob } from '../lib/api';
+import { previewKind } from '../lib/preview';
 import { formatBytes } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n';
 import Icon from './Icon';
-
-function previewKind(mime: string): 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'file' {
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('video/')) return 'video';
-  if (mime.startsWith('audio/')) return 'audio';
-  if (mime === 'application/pdf') return 'pdf';
-  if (mime.startsWith('text/') || ['application/json', 'application/xml', 'application/yaml', 'application/toml', 'application/x-ndjson'].includes(mime)) return 'text';
-  return 'file';
-}
 
 function Attachment({ attachment }: { attachment: MessageAttachment }) {
   const { token } = useAuth();

@@ -1,4 +1,5 @@
 import type { AppState } from './types';
+import type { UploadedWorkspaceFile, WorkspaceEntry } from '../../contracts';
 
 const TOKEN_KEY = 'dudu.token';
 
@@ -94,4 +95,85 @@ export async function loadState(token: string, signal?: AbortSignal): Promise<Ap
   const state = await request<unknown>(token, '/state', 'GET', undefined, signal);
   if (!isAppState(state)) throw new Error('状态响应结构不完整');
   return state;
+}
+
+async function uploadForm(token: string, path: string, files: File[]): Promise<UploadedWorkspaceFile[]> {
+  const form = new FormData();
+  for (const file of files) form.append('files', file);
+  const response = await checked(await fetch(`/api${path}`, { method: 'POST', headers: headers(token), body: form }));
+  return (await response.json() as { files: UploadedWorkspaceFile[] }).files;
+}
+
+/** Upload composer files into the Bot's work/uploads directory. */
+export function uploadComposerFiles(token: string, botId: string, files: File[]): Promise<UploadedWorkspaceFile[]> {
+  return uploadForm(token, `/bots/${segment(botId)}/uploads`, files);
+}
+
+export async function listWorkspace(token: string, botId: string, path: string): Promise<WorkspaceEntry[]> {
+  const query = new URLSearchParams({ path });
+  const result = await request<{ entries: WorkspaceEntry[] }>(token, `/bots/${segment(botId)}/files?${query}`);
+  return result.entries;
+}
+
+export function uploadWorkspaceFiles(token: string, botId: string, path: string, files: File[]): Promise<UploadedWorkspaceFile[]> {
+  const query = new URLSearchParams({ path });
+  return uploadForm(token, `/bots/${segment(botId)}/files?${query}`, files);
+}
+
+export async function deleteWorkspacePath(token: string, botId: string, path: string, recursive = false): Promise<void> {
+  const query = new URLSearchParams({ path, ...(recursive ? { recursive: '1' } : {}) });
+  await request(token, `/bots/${segment(botId)}/files?${query}`, 'DELETE');
+}
+
+export async function mkdirWorkspacePath(token: string, botId: string, path: string): Promise<void> {
+  await request(token, `/bots/${segment(botId)}/files/mkdir`, 'POST', { path });
+}
+
+export function workspaceBlob(token: string, botId: string, path: string, signal?: AbortSignal): Promise<Blob> {
+  return fetchBlob(token, `/bots/${segment(botId)}/file?${new URLSearchParams({ path })}`, signal);
+}
+
+export function saveAdvancedMode(token: string, advancedMode: boolean): Promise<boolean> {
+  return request<{ advancedMode: boolean }>(token, '/advanced-settings', 'PUT', { advancedMode }).then(result => result.advancedMode);
+}
+
+export type SessionHistoryPage = { entries: unknown[]; cursor: number; hasMore: boolean };
+
+export type SessionFrame =
+  | { kind: 'history'; entries: unknown[]; cursor: number; hasMore: boolean }
+  | { kind: 'agent'; event: unknown; at: string }
+  | { kind: 'error'; error: string };
+
+export function sessionHistory(token: string, botId: string, before: number, signal?: AbortSignal): Promise<SessionHistoryPage> {
+  return request<SessionHistoryPage>(token, `/bots/${segment(botId)}/session/history?before=${before}`, 'GET', undefined, signal);
+}
+
+/** Stream a Bot's agent session. Uses fetch so the Authorization header stays available. */
+export async function streamSession(token: string, botId: string, signal: AbortSignal, onFrame: (frame: SessionFrame) => void, onConnected: () => void): Promise<void> {
+  const response = await checked(await fetch(`/api/bots/${segment(botId)}/session/stream`, { headers: headers(token), signal }));
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('会话接口未返回 text/event-stream。');
+  if (!response.body) throw new Error('浏览器未提供流读取器。');
+  onConnected();
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  try {
+    while (!signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) throw new Error('会话实时连接已关闭。');
+      pending += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+      let end: number;
+      while ((end = pending.indexOf('\n\n')) !== -1) {
+        const block = pending.slice(0, end);
+        pending = pending.slice(end + 2);
+        const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+        if (!data) continue;
+        try { onFrame(JSON.parse(data) as SessionFrame); } catch { /* ignore malformed frames */ }
+      }
+      if (pending.length > 2_000_000) throw new Error('会话实时消息超过读取限制。');
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
