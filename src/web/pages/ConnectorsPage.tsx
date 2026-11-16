@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
 import { useLive } from '../state/LiveContext';
 import ArgumentEditor from '../ui/ArgumentEditor';
+import ToggleSwitch from '../ui/ToggleSwitch';
 import StringMapEditor, { entriesMap, mapEntries, type StringEntry } from '../ui/StringMapEditor';
 import DiscardChangesDialog from '../ui/DiscardChangesDialog';
 import IconButton from '../ui/IconButton';
@@ -104,10 +105,7 @@ export default function ConnectorsPage({ onDirtyChange, onPendingChange }: { onD
     <section className="flex flex-col gap-2 rounded-2xl border border-separator bg-surface px-5 py-4 sm:flex-row sm:items-center sm:justify-between" aria-label={t('connectors.computerTitle')}>
       <div className="min-w-0"><h3 className="text-sm font-semibold">{t('connectors.computerTitle')}</h3><p className="mt-0.5 text-xs text-muted">{t('connectors.computerDesc')}</p><p className="mt-0.5 text-xs text-muted">{t('connectors.autoStartHint')}</p></div>
       <div className="flex shrink-0 items-center gap-3">
-        <Checkbox isSelected={state.autoStartComputers !== false} isDisabled={Boolean(busy)} onChange={saveAutoStart}>
-          <Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>
-          <Checkbox.Content>{t('connectors.autoStart')}</Checkbox.Content>
-        </Checkbox>
+        <ToggleSwitch checked={state.autoStartComputers !== false} disabled={Boolean(busy)} label={t('connectors.autoStart')} onChange={saveAutoStart} />
       </div>
     </section>
     {!connectors.length && <EmptyState className="rounded-2xl border border-separator bg-surface px-6 py-14"><p>{t('connectors.none')}</p></EmptyState>}

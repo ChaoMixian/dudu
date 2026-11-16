@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Info, Plug, Server, Sun, UserRound } from 'lucide-react';
+import { Info, Plug, Server, SlidersHorizontal, Sun, UserRound } from 'lucide-react';
 import { useI18n } from '../i18n';
 import useUnsavedChanges from '../ui/useUnsavedChanges';
 import AboutPage from './AboutPage';
+import AdvancedPage from './AdvancedPage';
 import AppearancePage from './AppearancePage';
 import ConnectorsPage from './ConnectorsPage';
 import ProfilePage from './ProfilePage';
@@ -11,7 +12,7 @@ import ProvidersPage from './ProvidersPage';
 
 export default function SettingsPage() {
   const { tab = 'profile' } = useParams();
-  if (!['profile', 'providers', 'connectors', 'appearance', 'about'].includes(tab)) return <Navigate to="/settings/profile" replace />;
+  if (!['profile', 'providers', 'connectors', 'appearance', 'advanced', 'about'].includes(tab)) return <Navigate to="/settings/profile" replace />;
   return <SettingsContent key={tab} tab={tab} />;
 }
 
@@ -41,6 +42,9 @@ function SettingsContent({ tab }: { tab: string }) {
               <button type="button" className="settings-link" data-active={tab === 'appearance' ? 'true' : undefined} aria-current={tab === 'appearance' ? 'page' : undefined} onClick={() => go('appearance')} disabled={pending}>
                 <Sun size={17} aria-hidden="true" /><span>{t('appearance.title')}</span>
               </button>
+              <button type="button" className="settings-link" data-active={tab === 'advanced' ? 'true' : undefined} aria-current={tab === 'advanced' ? 'page' : undefined} onClick={() => go('advanced')} disabled={pending}>
+                <SlidersHorizontal size={17} aria-hidden="true" /><span>{t('nav.advanced')}</span>
+              </button>
               <button type="button" className="settings-link" data-active={tab === 'about' ? 'true' : undefined} aria-current={tab === 'about' ? 'page' : undefined} onClick={() => go('about')} disabled={pending}>
                 <Info size={17} aria-hidden="true" /><span>{t('about.title')}</span>
               </button>
@@ -51,6 +55,7 @@ function SettingsContent({ tab }: { tab: string }) {
             {tab === 'providers' && <ProvidersPage onDirtyChange={setDirty} onPendingChange={setPending} />}
             {tab === 'connectors' && <ConnectorsPage onDirtyChange={setDirty} onPendingChange={setPending} />}
             {tab === 'appearance' && <AppearancePage />}
+            {tab === 'advanced' && <AdvancedPage />}
             {tab === 'about' && <AboutPage />}
           </div>
         </div>
