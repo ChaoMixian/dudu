@@ -86,15 +86,27 @@ message_send route={kind:'bot'}
 - Browsers need HTTPS or localhost for WebCodecs to decode the live stream.
 - Same-UID desktop sessions are not a security sandbox.
 
+## Advanced mode and the tool panel
+
+- `advancedMode` is a global setting, off by default, stored in `config.json`. File browsing, terminal, and Session streaming are also checked on the server.
+- The right panel is owned by `BotPage`, spans the full height, and is independent of the conversation area. Files / Terminal / Session / Computer open as browser-like tabs; the menu at the left of the tab bar searches, switches, and closes tabs, and overflowing tabs fade at the edge. Panel content and tabs are saved per Bot and restored when the browser window is reopened; terminals reconnect with their saved pid. Closing the panel only drops the terminal WebSocket, it does not stop the PTY; only explicitly closing the terminal tab ends the process. Dragging the left edge resizes the panel and dragging it narrow closes it; the left sidebar can also be dragged narrow into the rail. Both widths are stored locally.
+- The file API only exposes the Bot workspace `work/`, `artifacts/`, `AGENTS.md`, and `MEMORY.md`; absolute paths, `..`, and symlinks are rejected. Uploads are limited to 8 files / 50 MiB.
+- The terminal is a supervisor PTY (`script`) with cwd `work/`. The browser connects through a short-lived ticket WebSocket, terminals carry their desktop id, and stopping the desktop closes them. A terminal's pid is saved in its tab; reopening the panel or browser reconnects and replays the recent output buffer. `stty` tracks the PTY window size to the panel width, including the initial size.
+- Session uses a read-only scheduler observer plus SSE. History is paged in 256 KiB byte windows and older entries load when scrolling up; events are bounded and base64 images are summarized. Observers never create or prompt a session.
+- Advanced mode is UI containment, not a security boundary; same-UID desktops can already reach the host.
+
 ## HTTP API
 
 - `GET /api/state`: config, Bots, messages, Bot threads, connectors, event sources, and status.
 - `POST /api/bots`; `PUT` / `DELETE /api/bots/:id`; `POST /api/bots/:id/pause|resume|stop`.
 - `GET /api/bots/:botId/peers/:peerId/messages`: full Bot-to-Bot history.
-- `POST /api/messages`, `POST /api/reactions`.
-- `PUT /api/providers`, `PUT /api/defaults`, `PUT /api/computer-settings` (desktop auto-start).
+- `POST /api/messages` (optional `attachments`), `POST /api/reactions`.
+- `PUT /api/providers`, `PUT /api/defaults`, `PUT /api/computer-settings` (desktop auto-start), `PUT /api/advanced-settings`.
 - `POST /api/connectors`, `POST /api/sources`, `POST /api/sources/:id/enable|disable|trigger`, `DELETE /api/sources/:id`.
 - Computers: `GET .../computer/status|shot|watch`, `POST .../start|stop|takeover`.
+- Files: `POST .../uploads` (composer), `GET/POST/DELETE .../files`, `POST .../files/mkdir`, `GET .../file`.
+- Terminal: `POST .../terminal`, `GET .../terminal/ws?ticket=...` (short-lived ticket WebSocket).
+- Session: `GET .../session/stream` (SSE: history plus live agent events).
 - `GET /api/events?after=N`, `GET /api/stream` (SSE with Last-Event-ID / after).
 - `GET /api/artifacts/:botId/:name`: authenticated Bot attachments and screenshots.
 

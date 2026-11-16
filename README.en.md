@@ -19,8 +19,9 @@ dudu treats Bots as long-lived collaborators rather than one-off chat windows. A
 ## Features
 
 - **Persistent identity and memory** — each Bot has its own `AGENTS.md`, `MEMORY.md`, working directory, and Pi session.
-- **Proactive communication** — normal messages, questions with options, emoji reactions, file attachments, and computer takeover requests.
+- **Proactive communication** — normal messages, questions with options, emoji reactions, file attachments (select, drop, or paste), and computer takeover requests.
 - **Independent computer** — each Bot owns a desktop that is restored when dudu starts; Bots can also start, stop, and inspect it themselves. The web UI lets you watch and take over.
+- **Advanced mode** — off by default. When enabled, a tool panel appears beside the Bot conversation with workspace files, a desktop terminal, a live Session view, and computer control. When off, the normal chat only keeps upload, drag, and paste attachments.
 - **Bot collaboration** — Bots can inspect the workspace directory (names, purposes, live status) and message each other. The main timeline shows notices, and clicking one opens the full history.
 - **Events and automation** — cron, fixed intervals, process output, and webhooks. Idle Bots receive backlog as one ordered batch.
 - **Model freedom** — configure providers and models graphically, set a workspace default, and switch per conversation.
@@ -64,6 +65,19 @@ bun run build:binary
 1. Go to **Settings → Models**, add a provider, API key, and models, then choose a default model.
 2. Click **New Bot**, pick an avatar, and enter a name plus an optional description.
 3. The Bot starts automatically and asks what you want it to work on, with clickable options.
+
+### Advanced mode
+
+Enable it in **Settings → Advanced** to show an independent full-height tool panel beside the Bot conversation. It opens tools in browser-like tabs, with a start page to choose one; drag the panel's left edge to adjust its width. Dragging it narrow closes the panel and keeps the tabs. The button at the left of the tab bar searches, switches, and closes open tabs; overflowing tabs fade at the edge.
+
+The left sidebar can also be dragged; dragging it narrow collapses it into the icon rail.
+
+- **Files** — browse `work/`, `artifacts/`, `AGENTS.md`, and `MEMORY.md`; upload, download, delete, and preview files.
+- **Terminal** — open a shell in the Bot's desktop environment, starting in `work/`. Closing the panel or switching Bots only drops the browser connection; the PTY keeps running and reconnects when reopened. Only closing the terminal tab or stopping the desktop ends it.
+- **Session** — inspect the Pi session history and watch text, thinking, tool calls, results, and token usage live.
+- **Computer** — view and operate the current Bot desktop directly.
+
+Closing the panel closes Session streams; terminals only detach and keep their PTY. Reopening the browser window restores the panel and tabs and reconnects terminals. When advanced mode is off, these entries and the panel stay hidden. Composer uploads, drag-and-drop, and paste stay available.
 
 ## How it works
 
