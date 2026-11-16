@@ -1141,6 +1141,7 @@ button.message-reaction:focus-visible {
   border: 1px solid var(--separator);
   border-radius: 12px;
   background: var(--surface-secondary);
+  color: var(--foreground);
 }
 
 .attachment-head {
