@@ -117,7 +117,11 @@ export class Computer {
       this.store.publish({ botId, sourceId: 'computer', type: 'computer.stopped', payload: { desktopId, state: result.state, port: result.port }, delivery: 'ignore' });
       return result;
     }
-    if (action === 'restart') return s.restart(desktopId);
+    if (action === 'restart') {
+      if (!await this.desktopState(desktopId)) return this.call(botId, 'start', {}, signal);
+      await s.stop(desktopId);
+      return this.call(botId, 'start', {}, signal);
+    }
     if (action === 'status') {
       try { return await s.get(desktopId); }
       catch (error) { if (error instanceof BotdError && error.status === 404) return { id: desktopId, botId, width, height, state: 'stopped' }; throw error; }

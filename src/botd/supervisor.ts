@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, chmod, rm, realpath, lstat, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, chmod, rm, realpath, lstat, readdir, readlink } from 'node:fs/promises';
 import { join, resolve, dirname, sep, isAbsolute } from 'node:path';
 import { id as validId } from '../contracts';
 import { BotdError, DEFAULT_ROOT, type BotdOptions, type DesktopConfig, type DesktopStatus, type SavedDesktop, type ProcessRecord, type ExecOptions, type ExecResult, type WatchInfo, type RecordingInfo } from './types';
@@ -141,7 +141,16 @@ export class BotdSupervisor {
     // The group number cannot be reused while a member still exists. Never signal unrelated process groups.
     try { process.kill(-p.pid,'SIGKILL'); } catch {}
   }
-  private async cleanup(d: SavedDesktop) { await Promise.all([...d.processes].reverse().map(p => this.kill(p))); d.processes = []; d.recording = undefined; }
+  private async cleanup(d: SavedDesktop) { await Promise.all([...d.processes].reverse().map(p => this.kill(p))); d.processes = []; d.recording = undefined; this.closeTerminals(d.config.id); }
+  /** Terminals are children of dudu, not of the session, so stopping a desktop must close them. */
+  private closeTerminals(id: string) {
+    for (const [pid, terminal] of this.terminals) {
+      if (terminal.desktopId !== id) continue;
+      try { process.kill(-pid,'SIGKILL'); } catch {}
+      this.terminals.delete(pid);
+      this.terminalListeners.delete(pid);
+    }
+  }
   private async wmPresent(d: SavedDesktop): Promise<boolean> {
     const output = await this.check(d,['xprop','-root','_NET_SUPPORTING_WM_CHECK']);
     const match = output.match(/0x[0-9a-f]+/i);
@@ -365,24 +374,69 @@ export class BotdSupervisor {
   async process_read(id: string, pid: number) { const p = this.background.get(integer(pid,1,Number.MAX_SAFE_INTEGER,'pid')); if (!p) throw new BotdError('Unknown background process',404); const data = await readFile(p.log,'utf8').catch(() => ''); return {pid: p.pid, output: data.slice(-256*1024), alive: alive(p.pid)}; }
 
   // Terminal: interactive PTY sessions via util-linux `script`.
-  private terminals = new Map<number, {child: import('node:child_process').ChildProcess; buffer: string; startTicks: string; command: string}>();
-  async terminal_create(id: string, options: {command?:string;cols?:number;rows?:number} = {}) {
+  private terminals = new Map<number, {desktopId:string; child:ChildProcess; buffer:string; startTicks:string; command:string}>();
+  private terminalListeners = new Map<number, Set<(data:string)=>void>>();
+  async terminal_create(id: string, options: {command?:string;cols?:number;rows?:number;cwd?:string} = {}) {
     const d = this.ready(id); const cols = integer(options.cols ?? 80,20,500,'cols'), rows = integer(options.rows ?? 24,5,200,'rows');
-    const command = options.command?.trim() || '/bin/sh';
-    const child = spawn(Bun.which('script')!,['-qfc',command,'/dev/null'],{detached:true,env:{...this.environment(d),TERM:'xterm-256color',COLUMNS:String(cols),LINES:String(rows)},cwd:join(this.dir(id),'home'),stdio:['pipe','pipe','pipe']});
+    if (options.cwd && (!isAbsolute(options.cwd) || options.cwd.includes('\0'))) throw new BotdError('cwd must be an absolute path');
+    const command = options.command?.trim() || Bun.which('bash') || '/bin/sh';
+    const child = spawn(Bun.which('script')!,['-qfc',command,'/dev/null'],{detached:true,env:{...this.environment(d),TERM:'xterm-256color',COLUMNS:String(cols),LINES:String(rows)},cwd:options.cwd ?? join(this.dir(id),'home'),stdio:['pipe','pipe','pipe']});
     await new Promise<void>((ok,no) => { child.once('spawn',ok); child.once('error',no); });
-    const startTicks = await ticks(child.pid!);
-    this.terminals.set(child.pid!, {child, buffer:'', startTicks, command});
-    child.stdout!.on('data',(b:Buffer)=>{const t=this.terminals.get(child.pid!); if(t) t.buffer=(t.buffer+b.toString()).slice(-256*1024);});
-    child.stderr!.on('data',(b:Buffer)=>{const t=this.terminals.get(child.pid!); if(t) t.buffer=(t.buffer+b.toString()).slice(-256*1024);});
-    child.once('close',()=>this.terminals.delete(child.pid!));
-    return {pid: child.pid!, command};
+    const pid = child.pid!;
+    const startTicks = await ticks(pid);
+    this.terminals.set(pid, {desktopId:id, child, buffer:'', startTicks, command});
+    const push = (b:Buffer) => {
+      const terminal = this.terminals.get(pid); if (!terminal) return;
+      const text = b.toString();
+      terminal.buffer = (terminal.buffer + text).slice(-256*1024);
+      for (const listener of this.terminalListeners.get(pid) ?? []) { try { listener(text); } catch {} }
+    };
+    child.stdout!.on('data',push);
+    child.stderr!.on('data',push);
+    child.once('close',()=>{ this.terminals.delete(pid); this.terminalListeners.delete(pid); });
+    // `script` creates the PTY after spawn; apply the viewer's real window size to it.
+    await this.terminal_resize(id,pid,cols,rows).catch(()=>{});
+    return {pid, command};
   }
-  async terminal_send(id: string, pid: number, data: string) { const t = this.termTerm(pid); t.child.stdin!.write(data); }
-  async terminal_read(id: string, pid: number) { const t = this.termTerm(pid); const out = t.buffer; t.buffer = ''; return out; }
-  async terminal_info(id: string, pid: number) { const t = this.termTerm(pid); return {pid, command: t.command, alive: alive(pid) && await ticks(pid) === t.startTicks}; }
-  async terminal_close(id: string, pid: number) { const t = this.termTerm(pid); try { process.kill(-pid,'SIGKILL'); } catch {} this.terminals.delete(pid); }
-  private termTerm(pid: number) { const t = this.terminals.get(integer(pid,1,Number.MAX_SAFE_INTEGER,'pid')); if (!t) throw new BotdError('Unknown terminal session',404); return t; }
+  /** Resize the real PTY, not just the xterm grid. */
+  async terminal_resize(id: string, pid: number, cols: number, rows: number) {
+    this.termTerm(pid,id);
+    const nextCols = integer(cols,20,500,'cols'), nextRows = integer(rows,5,200,'rows');
+    const slave = await this.ptySlave(pid,true);
+    const stty = Bun.which('stty');
+    if (!stty) throw new BotdError('stty is required to resize the terminal',500);
+    const proc = Bun.spawn([stty,'-F',slave,'rows',String(nextRows),'cols',String(nextCols)],{stdout:'ignore',stderr:'ignore'});
+    if (await proc.exited !== 0) throw new BotdError('Could not resize the terminal PTY',500);
+    return {cols: nextCols, rows: nextRows};
+  }
+  private async ptySlave(scriptPid:number, retry:boolean) {
+    for (let attempt=0; attempt<5; attempt++) {
+      const children = (await readFile(`/proc/${scriptPid}/task/${scriptPid}/children`,'utf8').catch(()=>''))
+        .trim().split(/\s+/).map(Number).filter(value=>value>0&&Number.isSafeInteger(value));
+      for (const child of children) {
+        const link = await readlink(`/proc/${child}/fd/0`).catch(()=> '');
+        if (/^\/dev\/pts\/\d+$/.test(link)) return link;
+      }
+      if (!retry) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new BotdError('Terminal PTY is not ready',404);
+  }
+  /** Current PTY tail, non-destructive; used to paint a newly attached viewer. */
+  terminal_snapshot(id: string, pid: number) { return this.termTerm(pid,id).buffer; }
+  /** Observe PTY output without draining the buffer used by terminal_read. */
+  terminal_subscribe(id: string, pid: number, listener: (data:string)=>void) {
+    this.termTerm(pid,id);
+    let listeners = this.terminalListeners.get(pid);
+    if (!listeners) { listeners = new Set(); this.terminalListeners.set(pid,listeners); }
+    listeners.add(listener);
+    return () => { const current = this.terminalListeners.get(pid); if (!current) return; current.delete(listener); if (!current.size) this.terminalListeners.delete(pid); };
+  }
+  async terminal_send(id: string, pid: number, data: string) { if (typeof data !== 'string' || data.length > 64*1024) throw new BotdError('Terminal input is too large'); const t = this.termTerm(pid,id); t.child.stdin!.write(data); }
+  async terminal_read(id: string, pid: number) { const t = this.termTerm(pid,id); const out = t.buffer; t.buffer = ''; return out; }
+  async terminal_info(id: string, pid: number) { const t = this.termTerm(pid,id); return {pid, command: t.command, alive: alive(pid) && await ticks(pid) === t.startTicks}; }
+  async terminal_close(id: string, pid: number) { this.termTerm(pid,id); try { process.kill(-pid,'SIGKILL'); } catch {} this.terminals.delete(pid); this.terminalListeners.delete(pid); }
+  private termTerm(pid: number, desktopId?: string) { const t = this.terminals.get(integer(pid,1,Number.MAX_SAFE_INTEGER,'pid')); if (!t || (desktopId && t.desktopId !== desktopId)) throw new BotdError('Unknown terminal session',404); return t; }
 
   async close() { if (!this.initialized) return; await this.init(); this.closing=true; await Promise.allSettled([...this.queues.values()]); for (const d of this.desktops.values()) { d.state='stopped'; await this.cleanup(d); } await this.persist(); if (this.locked) { await rm(join(this.root,'supervisor.lock'),{recursive:true,force:true}); this.locked=false; } }
 }
