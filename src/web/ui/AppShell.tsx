@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, AlertDialog, Button, Dropdown, Input, Modal, Spinner, TextField, Tooltip } from '@heroui/react';
 import type { BotConfig } from '../../contracts';
@@ -20,6 +20,21 @@ function readPins(): string[] {
   } catch { return []; }
 }
 
+const SIDEBAR_MIN = 220;
+const SIDEBAR_MAX = 420;
+const SIDEBAR_DEFAULT = 292;
+
+function readSidebarWidth(): number {
+  try {
+    const raw = localStorage.getItem('dudu.sidebar.width');
+    if (raw !== null) {
+      const value = Number(raw);
+      if (Number.isFinite(value)) return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, value));
+    }
+  } catch { /* ignore */ }
+  return SIDEBAR_DEFAULT;
+}
+
 export default function AppShell() {
   const { state, loaded, liveError, live, refresh, toasts, run } = useLive();
   const { updateAvailable, latest } = useBuildInfo();
@@ -31,6 +46,8 @@ export default function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try { return localStorage.getItem('dudu.sidebar') !== 'collapsed'; } catch { return true; }
   });
+  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const [sidebarResizing, setSidebarResizing] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -58,6 +75,89 @@ export default function AppShell() {
   const pinned = bots.filter(bot => pins.includes(bot.id));
   const unpinned = bots.filter(bot => !pins.includes(bot.id));
   const railBots = [...state.bots].sort((a, b) => Number(pins.includes(b.id)) - Number(pins.includes(a.id)));
+
+  const clampSidebarWidth = (value: number) => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, value));
+  const persistSidebarWidth = (value: number) => {
+    try { localStorage.setItem('dudu.sidebar.width', String(value)); } catch { /* ignore */ }
+  };
+  const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const wasOpen = sidebarOpen;
+    const startX = event.clientX;
+    const startWidth = wasOpen ? sidebarWidth : 62;
+    let nextOpen = wasOpen;
+    let nextWidth = sidebarWidth;
+    setSidebarResizing(true);
+    const move = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      if (wasOpen) {
+        const width = Math.max(160, Math.min(SIDEBAR_MAX, startWidth + delta));
+        nextOpen = true;
+        nextWidth = width;
+        setSidebarOpen(true);
+        setSidebarWidth(width);
+      } else {
+        const raw = 62 + delta;
+        if (raw > 140) {
+          nextOpen = true;
+          nextWidth = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, raw));
+        } else {
+          nextOpen = false;
+          nextWidth = sidebarWidth;
+        }
+      }
+    };
+    const stop = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setSidebarResizing(false);
+      if (wasOpen) {
+        if (nextWidth < SIDEBAR_MIN) {
+          setSidebarWidth(Math.max(SIDEBAR_MIN, startWidth));
+          persistSidebarWidth(Math.max(SIDEBAR_MIN, startWidth));
+          setSidebarOpen(false);
+        } else {
+          setSidebarWidth(nextWidth);
+          persistSidebarWidth(nextWidth);
+        }
+      } else if (nextOpen) {
+        // Keep the rail while dragging, then let the width transition play on release.
+        const width = Math.max(SIDEBAR_MIN, nextWidth);
+        setSidebarWidth(width);
+        setSidebarOpen(true);
+        persistSidebarWidth(width);
+      }
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+  };
+  const resizeSidebarKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    if (!sidebarOpen) {
+      if (event.key === 'ArrowRight') setSidebarOpen(true);
+      return;
+    }
+    if (event.key === 'ArrowLeft' && sidebarWidth <= SIDEBAR_MIN) {
+      setSidebarOpen(false);
+      return;
+    }
+    const next = clampSidebarWidth(sidebarWidth + (event.key === 'ArrowLeft' ? -24 : 24));
+    setSidebarWidth(next);
+    persistSidebarWidth(next);
+  };
+  const resetSidebarWidth = () => {
+    setSidebarOpen(true);
+    setSidebarWidth(SIDEBAR_DEFAULT);
+    persistSidebarWidth(SIDEBAR_DEFAULT);
+  };
 
   useEffect(() => {
     const open = () => setCreating(true);
@@ -243,7 +343,13 @@ export default function AppShell() {
   return (
     <div className="app-shell">
       {!mobile && (
-        <aside className="app-sidebar" data-collapsed={sidebarOpen ? undefined : 'true'} aria-label={t('app.name')}>
+        <aside
+          className="app-sidebar"
+          data-collapsed={sidebarOpen ? undefined : 'true'}
+          data-resizing={sidebarResizing ? 'true' : undefined}
+          style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
+          aria-label={t('app.name')}
+        >
           {sidebarOpen ? <div className="app-panel-inner">{sidebar(<IconButton label={t('ui.closeSidebar')} onPress={() => setSidebarOpen(false)}><Icon name="sidebar" /></IconButton>)}</div> : (
             <div className="app-rail">
               {railItem(t('ui.openSidebar'), 'sidebar', false, () => setSidebarOpen(true))}
@@ -265,6 +371,19 @@ export default function AppShell() {
               {railItem(t('nav.settings'), 'settings', location.pathname.startsWith('/settings') && location.pathname !== '/settings/connectors', () => navigate('/settings/profile'))}
             </div>
           )}
+          <div
+            className="app-sidebar-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('ui.resizeSidebar')}
+            aria-valuemin={SIDEBAR_MIN}
+            aria-valuemax={SIDEBAR_MAX}
+            aria-valuenow={sidebarOpen ? sidebarWidth : 62}
+            tabIndex={0}
+            onPointerDown={startSidebarResize}
+            onKeyDown={resizeSidebarKey}
+            onDoubleClick={resetSidebarWidth}
+          />
         </aside>
       )}
 
