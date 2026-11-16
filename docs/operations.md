@@ -172,6 +172,21 @@ Bot 间通信的保护：
 - **电脑**：直接查看和操作当前 Bot 的桌面。
 - 高级模式只做界面收敛，不是权限隔离；文件、终端和桌面仍以运行 dudu 的用户身份访问本机。
 
+## 发布
+
+版本使用 `0.1.x`，每次发布把最后一位加一（例如 `0.1.0` → `0.1.1`）。发布由 Git tag 触发，tag 必须与 `package.json` 的 `version` 完全一致：
+
+```sh
+# 1. 修改 package.json 的 version 并提交
+# 2. 打 signed tag
+git tag -s v0.1.0 -m "dudu 0.1.0"
+# 3. 推送提交和 tag
+git push origin main
+git push origin v0.1.0
+```
+
+`.github/workflows/ci.yml` 在 `main` 和 PR 上运行类型检查、测试、前端构建和单文件构建。推送 `v*` tag 后，`.github/workflows/release.yml` 会再次验证版本、运行测试、在 Ubuntu 22.04 上构建 `linux-x64` 单文件，生成 `dudu-<version>-linux-x64.tar.gz` 与 SHA-256 校验文件，并创建 GitHub Release。
+
 ## 远程访问
 
 - 推荐通过 HTTPS 反向代理访问 dudu；如果使用 frp，请同时转发 HTTP 和 WebSocket，并保持同一源

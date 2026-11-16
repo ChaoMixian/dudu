@@ -172,6 +172,21 @@ Enable it in **Settings → Advanced** to show an independent full-height tool p
 - **Computer**: view and operate the current Bot desktop directly.
 - Advanced mode is UI containment, not privilege separation; files, the terminal, and the desktop still run as the user running dudu.
 
+## Release
+
+Versions use `0.1.x`; bump the last component for each release (for example `0.1.0` → `0.1.1`). Releases are triggered by a Git tag, and the tag must exactly match `package.json` `version`:
+
+```sh
+# 1. Bump package.json version and commit it
+# 2. Create a signed tag
+git tag -s v0.1.0 -m "dudu 0.1.0"
+# 3. Push the commit and tag
+git push origin main
+git push origin v0.1.0
+```
+
+`.github/workflows/ci.yml` runs typecheck, tests, the frontend build, and the single-file build on `main` and pull requests. Pushing a `v*` tag runs `.github/workflows/release.yml`, which re-validates the version, runs the tests, builds the `linux-x64` single file on Ubuntu 22.04 to keep a lower glibc baseline, creates `dudu-<version>-linux-x64.tar.gz` plus a SHA-256 checksum, and publishes a GitHub Release.
+
 ## Remote access
 
 - Prefer an HTTPS reverse proxy for dudu. If using frp, forward both HTTP and WebSocket and keep them same-origin
