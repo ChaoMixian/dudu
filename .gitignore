@@ -5,12 +5,12 @@ coverage/
 *.tsbuildinfo
 
 # Local runtime data and workspaces
-.zcode/
-.dudu/
-bots/
-connectors/
-data/
-artifacts/
+/.zcode/
+/.dudu/
+/bots/
+/connectors/
+/data/
+/artifacts/
 *.sqlite
 *.sqlite-*
 *.db
