@@ -3,10 +3,13 @@ import { join, resolve } from 'node:path';
 import { ConfigStore } from './core/config';
 import { Store } from './core/store';
 import { Scheduler, type SessionFactory } from './agent/scheduler';
+import { readSessionHistory, sanitizeSessionEvent } from './agent/session-view';
 import { createPi } from './agent/pi';
 import { ConnectorRegistry } from './connectors';
 import { SourceManager } from './sources';
 import { Computer } from './core/computer';
+import { saveAttachments } from './core/attachments';
+import { deleteWorkspace, listWorkspace, mkdirWorkspace, uploadWorkspaceFiles, workAttachment, workspaceFile } from './core/workspace-files';
 import { eventInput, id, object, text, type DuduEvent, type ProviderConfig } from './contracts';
 const STATIC_TYPES: Record<string,string> = {
   html:'text/html; charset=utf-8', htm:'text/html; charset=utf-8',
@@ -53,9 +56,13 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
     queueMicrotask(() => scheduler.notify(event.botId));
   });
   const json=(body:unknown,status=200)=>Response.json(body,{status});
+  const advancedMode=()=>config.global().advancedMode===true;
+  const requireAdvanced=()=>advancedMode()?null:json({error:'Advanced mode is disabled'},403);
+  const formFiles=(form:FormData)=>form.getAll('files').filter((value):value is File => !!value && typeof value==='object' && typeof (value as File).arrayBuffer==='function');
   // The computer stream is proxied through this same HTTP port so remote (frp) users never
   // need to reach voxl's loopback port. Short-lived tickets authorize iframe asset/WS requests.
   const liveTickets=new Map<string,{url:string;expires:number}>();
+  const terminalTickets=new Map<string,{botId:string;desktopId:string;pid:number;expires:number}>();
   let httpServer:any;
   const issueLiveUrl=(botId:string,watchUrl:string)=>{const now=Date.now();for(const [key,ticket] of liveTickets)if(ticket.expires<now)liveTickets.delete(key);const ticket=crypto.randomUUID();liveTickets.set(ticket,{url:watchUrl,expires:now+4*60*60_000});return `/api/bots/${encodeURIComponent(botId)}/computer/live/${ticket}/`;};
   async function proxyLive(req:Request,url:URL,parts:string[]):Promise<Response>{
@@ -76,20 +83,56 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
     return new Response(response.body,{status:response.status,headers});
   }
   const websocket={
-    open(ws:any){const upstream=new WebSocket(ws.data.target);upstream.binaryType='arraybuffer';ws.data.upstream=upstream;upstream.addEventListener('open',()=>{for(const message of ws.data.queue.splice(0))upstream.send(message);});upstream.addEventListener('message',(event:any)=>ws.send(event.data));upstream.addEventListener('close',()=>{try{ws.close();}catch{}});upstream.addEventListener('error',()=>{try{ws.close();}catch{}});},
-    message(ws:any,message:any){const upstream=ws.data.upstream;if(upstream&&upstream.readyState===WebSocket.OPEN)upstream.send(message);else ws.data.queue.push(message);},
-    close(ws:any){try{ws.data.upstream?.close();}catch{}},
+    open(ws:any){
+      if(ws.data.mode==='terminal'){
+        try {
+          const initial=computer.supervisor.terminal_snapshot(ws.data.desktopId,ws.data.pid);
+          ws.data.off=computer.supervisor.terminal_subscribe(ws.data.desktopId,ws.data.pid,(data:string)=>{try{ws.send(JSON.stringify({type:'output',data}));}catch{}});
+          if(initial)ws.send(JSON.stringify({type:'output',data:initial}));
+          ws.send(JSON.stringify({type:'ready'}));
+        } catch { try{ws.close();}catch{} }
+        return;
+      }
+      const upstream=new WebSocket(ws.data.target);upstream.binaryType='arraybuffer';ws.data.upstream=upstream;upstream.addEventListener('open',()=>{for(const message of ws.data.queue.splice(0))upstream.send(message);});upstream.addEventListener('message',(event:any)=>ws.send(event.data));upstream.addEventListener('close',()=>{try{ws.close();}catch{}});upstream.addEventListener('error',()=>{try{ws.close();}catch{}});
+    },
+    message(ws:any,message:any){
+      if(ws.data.mode==='terminal'){
+        let value:any;
+        try { value=JSON.parse(typeof message==='string'?message:Buffer.from(message).toString()); } catch { return; }
+        if(value?.type==='input'&&typeof value.data==='string')void computer.supervisor.terminal_send(ws.data.desktopId,ws.data.pid,value.data).catch(()=>{});
+        if(value?.type==='resize'&&Number.isInteger(value.cols)&&Number.isInteger(value.rows))void computer.supervisor.terminal_resize(ws.data.desktopId,ws.data.pid,value.cols,value.rows).catch(()=>{});
+        if(value?.type==='close'){try{ws.close();}catch{}}
+        return;
+      }
+      const upstream=ws.data.upstream;if(upstream&&upstream.readyState===WebSocket.OPEN)upstream.send(message);else ws.data.queue.push(message);
+    },
+    close(ws:any){
+      if(ws.data.mode==='terminal'){try{ws.data.off?.();}catch{}return;}
+      try{ws.data.upstream?.close();}catch{}
+    },
   };
   async function handle(req:Request):Promise<Response> { const url=new URL(req.url);const path=url.pathname;try {
     if(path==='/healthz')return json({ok:true});
     if(path.startsWith('/api/')) {const token=config.global().token??process.env.DUDU_TOKEN;
       const liveProxyPath=/^\/api\/bots\/[^/]+\/computer\/live\/[^/]+(?:\/|$)/.test(path);
+      const terminalWsPath=/^\/api\/bots\/[^/]+\/terminal\/ws$/.test(path);
       if(path==='/api/auth/status')return json({authRequired:!!token});
-      if(token&&!liveProxyPath&&req.headers.get('authorization')!==`Bearer ${token}`&&!(path==='/api/stream'&&url.searchParams.get('token')===token))return json({error:'Unauthorized'},401);
+      if(token&&!liveProxyPath&&!terminalWsPath&&req.headers.get('authorization')!==`Bearer ${token}`&&!(path==='/api/stream'&&url.searchParams.get('token')===token))return json({error:'Unauthorized'},401);
       if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-methods':'GET,POST,PUT,DELETE,OPTIONS','access-control-allow-headers':'content-type,authorization,last-event-id','access-control-max-age':'600'}});
       const parts=path.split('/').filter(Boolean);const data=async()=>object(await req.json());
       if(liveProxyPath)return await proxyLive(req,url,parts);
-      if(path==='/api/state') {const c=config.global();return json({bots:config.bots(),connectors:registry.list(),sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,profile:c.profile??{},statuses:config.bots().map(b=>scheduler.status(b.id)),messages:store.messages(),botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});}
+      if(terminalWsPath){
+        if(!httpServer)return json({error:'WebSocket server unavailable'},503);
+        if(!advancedMode())return json({error:'Advanced mode is disabled'},403);
+        const key=url.searchParams.get('ticket')??'';
+        const ticket=terminalTickets.get(key);
+        terminalTickets.delete(key);
+        const botId=parts[2]??'';
+        if(!ticket||ticket.expires<Date.now()||ticket.botId!==botId)return json({error:'Terminal session expired'},403);
+        const upgraded=httpServer.upgrade(req,{data:{mode:'terminal',botId:ticket.botId,desktopId:ticket.desktopId,pid:ticket.pid}});
+        return upgraded?undefined as unknown as Response:json({error:'WebSocket upgrade failed'},400);
+      }
+      if(path==='/api/state') {const c=config.global();return json({bots:config.bots(),connectors:registry.list(),sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,advancedMode:c.advancedMode===true,profile:c.profile??{},statuses:config.bots().map(b=>scheduler.status(b.id)),messages:store.messages(),botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});}
       if(path==='/api/events'&&req.method==='POST')return json(submit(await data()),202);
       if(path==='/api/events'&&req.method==='GET')return json(store.replay(Number(url.searchParams.get('after')??0)));
       if(path==='/api/stream') {const after=Number(req.headers.get('last-event-id')??url.searchParams.get('after')??0);if(!Number.isSafeInteger(after)||after<0)throw new Error('Invalid SSE cursor');const encoder=new TextEncoder();let cleanup=()=>{};const stream=new ReadableStream<Uint8Array>({start(controller){let cursor=after;const send=(e:DuduEvent)=>{if(e.seq<=cursor)return;cursor=e.seq;controller.enqueue(encoder.encode(`id: ${e.seq}\nevent: update\ndata: ${JSON.stringify(e)}\n\n`));};let page:DuduEvent[];do{page=store.replay(cursor);for(const e of page)send(e);}while(page.length===500);const listener=(e:DuduEvent)=>send(e);store.listeners.add(listener);const timer=setInterval(()=>controller.enqueue(encoder.encode(': heartbeat\n\n')),15000);cleanup=()=>{clearInterval(timer);store.listeners.delete(listener);};req.signal.addEventListener('abort',()=>{cleanup();try{controller.close();}catch{}},{once:true});},cancel(){cleanup();}});return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-cache','connection':'keep-alive'}});}
@@ -102,9 +145,79 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         if(parts.length===3&&req.method==='PUT'){const input=await data();const next=config.saveBot({...bot,...input,id:botId});publishDigest('bot.updated',{botId,name:next.name});scheduler.invalidate(botId);return json(next);}
         if(parts[3]==='pause'||parts[3]==='resume'||parts[3]==='stop') {if(req.method!=='POST')return json({error:'Method not allowed'},405);const action=parts[3];if(action==='stop'||action==='pause'){config.saveBot({...bot,paused:true});await scheduler.cancel(botId);}else {config.saveBot({...bot,paused:false});if(action==='resume')scheduler.notify(botId);}systemEvent('bot.state.changed',{action,paused:action!=='resume'},botId);return json(scheduler.status(botId));}
         if(parts[3]==='peers'&&parts[4]&&parts[5]==='messages') {const peerId=id(parts[4]);config.bot(peerId);return json(store.botHistory(botId,peerId));}
+        if(parts[3]==='uploads'&&req.method==='POST'){const files=formFiles(await req.formData());if(!files.length)throw new Error('No files');return json({files:await uploadWorkspaceFiles(config,botId,'work/uploads',files,{ensureDir:true})},201);}
+        if(parts[3]==='files'&&parts[4]==='mkdir'&&req.method==='POST'){const denied=requireAdvanced();if(denied)return denied;const v=await data();return json(await mkdirWorkspace(config,botId,String(v.path??'')),201);}
+        if(parts[3]==='files'&&!parts[4]){const denied=requireAdvanced();if(denied)return denied;const target=url.searchParams.get('path')??'';if(req.method==='GET')return json({path:target,entries:await listWorkspace(config,botId,target)});if(req.method==='POST'){const files=formFiles(await req.formData());if(!files.length)throw new Error('No files');return json({files:await uploadWorkspaceFiles(config,botId,target,files)},201);}if(req.method==='DELETE')return json(await deleteWorkspace(config,botId,target,url.searchParams.get('recursive')==='1'));return json({error:'Method not allowed'},405);}
+        if(parts[3]==='file'&&req.method==='GET'){const denied=requireAdvanced();if(denied)return denied;const file=await workspaceFile(config,botId,url.searchParams.get('path')??'');const headers:Record<string,string>={'content-type':file.mime,'cache-control':'no-store','content-length':String(file.size)};if(url.searchParams.get('download')==='1')headers['content-disposition']=`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`;return new Response(file.file,{headers});}
+        if(parts[3]==='terminal'&&parts[4]==='kill'&&req.method==='POST'){
+          const denied=requireAdvanced();if(denied)return denied;
+          const v=await data();
+          const pid=Number.isSafeInteger(v.pid)&&v.pid>0?v.pid:0;
+          if(!pid)throw new Error('Invalid terminal pid');
+          const target=computer.target(botId);
+          await computer.supervisor.terminal_close(target.desktopId,pid);
+          return json({closed:true});
+        }
+        if(parts[3]==='terminal'&&!parts[4]&&req.method==='POST'){
+          const denied=requireAdvanced();if(denied)return denied;
+          const v=await data();
+          const cols=Number.isInteger(v.cols)?v.cols:100, rows=Number.isInteger(v.rows)?v.rows:30;
+          const status=await computer.call(botId,'status');
+          if(status.state!=='ready')await computer.call(botId,'start');
+          const target=computer.target(botId);
+          const requested=Number.isSafeInteger(v.pid)&&v.pid>0?v.pid:undefined;
+          let pid: number | undefined;
+          if(requested){
+            try {
+              const info=await computer.supervisor.terminal_info(target.desktopId,requested);
+              if(info.alive){
+                pid=requested;
+                await computer.supervisor.terminal_resize(target.desktopId,requested,cols,rows).catch(()=>{});
+              }
+            } catch { /* stale terminal from before a restart */ }
+          }
+          if(!pid){
+            const created=await computer.supervisor.terminal_create(target.desktopId,{cols,rows,cwd:join(config.botPath(botId),'work')});
+            pid=created.pid;
+          }
+          const now=Date.now();for(const [key,ticket] of terminalTickets)if(ticket.expires<now)terminalTickets.delete(key);
+          const ticket=crypto.randomUUID();
+          terminalTickets.set(ticket,{botId,desktopId:target.desktopId,pid,expires:now+60_000});
+          return json({ticket,pid,desktopId:target.desktopId},201);
+        }
+        if(parts[3]==='session'&&parts[4]==='history'&&req.method==='GET'){
+          const denied=requireAdvanced();if(denied)return denied;
+          const raw=url.searchParams.get('before');
+          const before=raw===null?undefined:Number(raw);
+          if(before!==undefined&&(!Number.isSafeInteger(before)||before<0))throw new Error('Invalid history cursor');
+          return json(await readSessionHistory(config,botId,before));
+        }
+        if(parts[3]==='session'&&parts[4]==='stream'&&req.method==='GET'){
+          const denied=requireAdvanced();if(denied)return denied;
+          const encoder=new TextEncoder();
+          let cleanup=()=>{};
+          const stream=new ReadableStream<Uint8Array>({
+            start(controller){
+              let closed=false,live=false;const pending:any[]=[];let heartbeat:ReturnType<typeof setInterval>|undefined;
+              const frame=(kind:string,payload:Record<string,unknown>)=>{if(closed)return;try{controller.enqueue(encoder.encode(`event: session\ndata: ${JSON.stringify({kind,...payload})}\n\n`));}catch{}};
+              const off=scheduler.observe(botId,event=>{if(closed)return;if(!live){pending.push(event);return;}frame('agent',{event:sanitizeSessionEvent(event),at:new Date().toISOString()});});
+              cleanup=()=>{if(closed)return;closed=true;off();if(heartbeat)clearInterval(heartbeat);};
+              req.signal.addEventListener('abort',()=>{cleanup();try{controller.close();}catch{}},{once:true});
+              void readSessionHistory(config,botId).then(history=>{
+                if(closed)return;
+                frame('history',{entries:history.entries,cursor:history.cursor,hasMore:history.hasMore});
+                live=true;
+                for(const event of pending.splice(0))frame('agent',{event:sanitizeSessionEvent(event),at:new Date().toISOString()});
+                heartbeat=setInterval(()=>{try{controller.enqueue(encoder.encode(': heartbeat\n\n'));}catch{}},15000);
+              }).catch(error=>{if(closed)return;frame('error',{error:String(error)});cleanup();try{controller.close();}catch{}});
+            },
+            cancel(){cleanup();}
+          });
+          return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-cache','connection':'keep-alive'}});
+        }
         if(parts[3]==='computer'&&parts[4]) {const action=parts[4];let result:any;try{result=await computer.call(botId,action,req.method==='POST'?await data():{});}catch(error){if(action==='start'||action==='stop')store.publish({botId,sourceId:'computer',type:'computer.error',payload:{error:String(error)},delivery:'digest'});throw error;}if(action==='shot')return new Response(Buffer.from(result.base64,'base64'),{headers:{'content-type':'image/png'}});if(action==='watch'&&typeof result.url==='string')result.proxyUrl=issueLiveUrl(botId,result.url);return json(result);}
       }
-      if(path==='/api/messages'&&req.method==='POST'){const v=await data();const botId=id(v.botId);config.bot(botId);const conversationId=id(v.conversationId??'default');const content=text(v.text);const replyTo=v.replyTo?id(v.replyTo):undefined;if(replyTo){const target=store.messageById(replyTo);if(!target||target.botId!==botId)throw new Error('Unknown reply target');}const message=store.message(botId,conversationId,'user',content,'accepted',undefined,'message',undefined,undefined,replyTo);const accepted=submit({botId,sourceId:`web:${conversationId}`,type:'message.web',payload:{text:content,messageId:message.id,replyTo},replyTo:{kind:'web',id:conversationId}});return json({message,...accepted,status:'accepted'},202);}
+      if(path==='/api/messages'&&req.method==='POST'){const v=await data();const botId=id(v.botId);config.bot(botId);const conversationId=id(v.conversationId??'default');const content=typeof v.text==='string'?v.text.trim():'';const replyTo=v.replyTo?id(v.replyTo):undefined;if(replyTo){const target=store.messageById(replyTo);if(!target||target.botId!==botId)throw new Error('Unknown reply target');}const inputs=Array.isArray(v.attachments)?v.attachments.map(item=>{const attachment=object(item);return {path:attachment.path,name:attachment.name};}):[];if(!content&&!inputs.length)throw new Error('text or attachments are required');if(inputs.length>8)throw new Error('At most 8 attachments are allowed');const resolved:{relative:string;name:string;mime:string;size:number}[]=[];for(const input of inputs){const file=await workAttachment(config,botId,input.path);resolved.push({...file,name:typeof input.name==='string'&&input.name.trim()?input.name.trim().slice(0,200):file.name});}const attachments=resolved.length?saveAttachments(config,botId,resolved.map(file=>({path:file.relative,name:file.name}))):undefined;const message=store.message(botId,conversationId,'user',content,'accepted',undefined,'message',undefined,undefined,replyTo,attachments);const accepted=submit({botId,sourceId:`web:${conversationId}`,type:'message.web',payload:{text:content,messageId:message.id,replyTo,...(resolved.length?{attachments:resolved.map(file=>({name:file.name,path:file.relative,mime:file.mime,size:file.size}))}:{})},replyTo:{kind:'web',id:conversationId}});return json({message,...accepted,status:'accepted'},202);}
       if(path==='/api/reactions'&&req.method==='POST'){const v=await data();const botId=id(v.botId);config.bot(botId);const messageId=id(v.messageId);const emoji=text(v.emoji,'emoji').slice(0,32);const target=store.messageById(messageId);if(!target||target.botId!==botId||target.kind==='reaction')throw new Error('Unknown reaction target');return json(store.toggleReaction(botId,target.conversationId,messageId,emoji,'user'));}
       if(path==='/api/connectors'&&req.method==='POST'){const result=registry.register(await data() as any);for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'connectors',connectorId:result.id});publishDigest('connector.changed',{connectorId:result.id,action:'saved'});return json(result,201);}
       if(path==='/api/sources'&&req.method==='POST'){const v=await data();config.bot(v.botId);return json(sources.register(v as any),201);}
@@ -115,6 +228,7 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         for(const b of config.bots())if(!b.model)scheduler.invalidate(b.id);systemEvent('config.changed',{section:'defaults'});publishDigest('config.defaults',{previousProvider:previous.defaultProvider,previousModel:previous.defaultModel,provider:next.defaultProvider,model:next.defaultModel});return json({defaults:{provider:next.defaultProvider,model:next.defaultModel}});}
       if(path==='/api/profile'&&req.method==='PUT'){const v=await data();const name=typeof v.name==='string'?v.name.trim():'';if(name.length>80)throw new Error('Name is too long');const avatar=typeof v.avatar==='string'&&v.avatar? v.avatar: undefined;if(avatar&&avatar.length>2_000_000)throw new Error('Avatar is too large');if(avatar&&!/^data:image\/(?:png|jpe?g|webp|gif|svg\+xml)[;,]/.test(avatar)&&!/^https?:\/\//.test(avatar))throw new Error('Invalid avatar');const avatarStyle=typeof v.avatarStyle==='string'&&/^[a-z0-9-]{1,32}$/.test(v.avatarStyle)?v.avatarStyle:undefined;const avatarPreset=typeof v.avatarPreset==='string'&&/^[a-z0-9-]{1,32}$/.test(v.avatarPreset)?v.avatarPreset:undefined;const profile={...(name?{name}:{}),...(avatar?{avatar}:{}),...(avatarStyle?{avatarStyle}:{}),...(avatarPreset?{avatarPreset}:{})};config.setGlobal({...config.global(),profile});systemEvent('config.changed',{section:'profile'});return json({profile});}
       if(path==='/api/computer-settings'&&req.method==='PUT'){const v=await data();if(typeof v.autoStart!=='boolean')throw new Error('autoStart must be a boolean');config.setGlobal({...config.global(),autoStartComputers:v.autoStart});systemEvent('config.changed',{section:'computer',autoStart:v.autoStart});return json({autoStartComputers:v.autoStart});}
+      if(path==='/api/advanced-settings'&&req.method==='PUT'){const v=await data();if(typeof v.advancedMode!=='boolean')throw new Error('advancedMode must be a boolean');config.setGlobal({...config.global(),advancedMode:v.advancedMode});systemEvent('config.changed',{section:'advanced',advancedMode:v.advancedMode});return json({advancedMode:v.advancedMode});}
       if(path==='/api/providers/models'&&req.method==='POST'){const v=await data();const baseUrl=text(v.baseUrl,'baseUrl');const target=new URL(baseUrl);if(!['http:','https:'].includes(target.protocol))throw new Error('baseUrl must be an HTTP(S) URL');if(!['openai-completions','openai-responses','anthropic-messages'].includes(v.api))throw new Error('Unsupported provider API');
         const base=baseUrl.replace(/\/+$/,'');const endpoint=base.endsWith('/v1')?`${base}/models`:`${base}/v1/models`;const headers:Record<string,string>={accept:'application/json'};const key=typeof v.apiKey==='string'?v.apiKey.trim():'';
         if(v.api==='anthropic-messages'){if(key)headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';}else if(key)headers.authorization=`Bearer ${key}`;
