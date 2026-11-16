@@ -23,6 +23,11 @@ const MIME: Record<string, string> = {
 
 export interface AttachmentInput { path?: unknown; name?: unknown }
 
+/** MIME type for a file name; the shared fallback is application/octet-stream. */
+export function mimeFor(name: string): string {
+  return MIME[extname(name).toLowerCase()] ?? 'application/octet-stream';
+}
+
 function storageName(display: string, source: string): string {
   const extension = extname(display) || extname(source);
   const safe = basename(display).replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(-80);
@@ -44,13 +49,13 @@ export function saveAttachments(config: ConfigStore, botId: string, inputs: Atta
     if (!stat.isFile()) throw new Error(`Attachment is not a regular file: ${raw}`);
     if (stat.size > MAX_BYTES) throw new Error(`Attachment exceeds ${MAX_BYTES / 1024 / 1024} MiB: ${raw}`);
     const display = (typeof input.name === 'string' && input.name.trim() ? input.name.trim() : basename(source)).slice(0, 200);
-    const extension = (extname(display) || extname(source)).toLowerCase();
     const storage = `${crypto.randomUUID()}-${storageName(display, source)}`;
+    const mime = mimeFor(display) === 'application/octet-stream' ? mimeFor(source) : mimeFor(display);
     copyFileSync(source, join(artifacts, storage));
     return {
       id: crypto.randomUUID(),
       name: display,
-      mime: MIME[extension] ?? 'application/octet-stream',
+      mime,
       size: stat.size,
       url: `/api/artifacts/${botId}/${storage}`,
     };
