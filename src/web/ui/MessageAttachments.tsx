@@ -38,7 +38,7 @@ function Attachment({ attachment }: { attachment: MessageAttachment }) {
   }, [attachment.url, kind, token]);
 
   return (
-    <div className={`attachment attachment-${kind}`}>
+    <div className="attachment">
       <div className="attachment-head">
         <span className="attachment-icon"><Icon name={kind === 'image' ? 'image' : 'file'} size={17} /></span>
         <span className="attachment-meta">

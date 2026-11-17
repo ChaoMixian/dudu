@@ -81,11 +81,11 @@ Workspace files are the source of truth:
 | `DUDU_HOST` | API listen address, default `127.0.0.1` |
 | `DUDU_PORT` | API port, default `7331` |
 | `DUDU_BOTD_ROOT` | Desktop data directory, default `<workspace>/.dudu/botd` |
-| `DUDU_TOKEN` | Bearer token; can also be set in `config.json` |
+| `DUDU_TOKEN` | Bearer token; also accepted as the login password when no access password is set; can be set in `config.json` |
 | `DUDU_URL` | dudu address used by the CLI |
 | `UI_PREVIEW_PORT` | Isolated UI preview port |
 
-Before exposing dudu to a LAN or the public internet, set a token and put it behind an HTTPS reverse proxy with access control.
+Before exposing dudu to a LAN or the public internet, set an access password during first-run setup, or at least configure `DUDU_TOKEN`, and put dudu behind an HTTPS reverse proxy with access control.
 
 ## Model providers
 

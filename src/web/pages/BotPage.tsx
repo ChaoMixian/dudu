@@ -5,6 +5,7 @@ import { useLive, useMutate } from '../state/LiveContext';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n';
 import { request, segment } from '../lib/api';
+import { randomId } from '../lib/random';
 import Icon from '../ui/Icon';
 import IconButton from '../ui/IconButton';
 import { openCreateBot } from '../ui/CreateBotDialog';
@@ -120,7 +121,7 @@ export default function BotPage() {
     setSideOpen(true);
   };
   const addPanelTab = (kind: PanelKind) => {
-    const id = crypto.randomUUID();
+    const id = randomId();
     setPanelTabs(current => [...current, { id, kind, createdAt: Date.now() }]);
     setActiveTabId(id);
     openSide();

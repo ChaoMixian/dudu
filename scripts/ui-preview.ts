@@ -56,6 +56,7 @@ const state: AppState = {
   providers: [{ id: 'local', name: 'Local workspace', api: 'openai-completions', baseUrl: 'http://127.0.0.1:9999/v1', apiKey: 'preview-key', models: [{ id: 'workspace-model', name: 'Workspace model' }, { id: 'reasoning-model', name: 'Reasoning model' }] }],
   defaults: { provider: 'local', model: 'workspace-model' },
   autoStartComputers: true,
+  setupCompleted: true,
   sources: [{ id: 'daily-review', botId: 'assistant', kind: 'cron', enabled: true, priority: 'normal', cron: '0 9 * * 1-5', timezone: 'Asia/Shanghai', payload: { task: en ? 'Organize today\'s work list' : '整理今天的工作清单' } }],
   statuses: [{ botId: 'assistant', state: 'idle', pending: 0 }, { botId: 'developer', state: 'paused', pending: 0 }, { botId: 'ideas', state: 'idle', pending: 0 }],
   messages,

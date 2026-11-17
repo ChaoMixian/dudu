@@ -1,22 +1,21 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Form, Input, Label, TextField } from '@heroui/react';
-import { errorText } from '../lib/api';
+import { ApiError, errorText } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n';
 import BrandMark from '../ui/BrandMark';
 
 export default function LoginPage() {
-  const { login, authRequired } = useAuth();
+  const { login } = useAuth();
   const { t, locale, setLocale } = useI18n();
   const navigate = useNavigate();
-  const [token, setToken] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
 
   return (
     <div className="login-page">
-      <div className="login-glow" aria-hidden="true" />
       <section className="login-panel" aria-label={t('app.name')}>
         <header className="login-brand">
           <BrandMark size={40} />
@@ -24,15 +23,6 @@ export default function LoginPage() {
         </header>
 
         <div className="login-alerts">
-          {authRequired === null && <Alert status="warning"><Alert.Content><Alert.Description>{t('auth.unreachable')}</Alert.Description></Alert.Content></Alert>}
-          {authRequired === false && (
-            <Alert status="warning">
-              <Alert.Content>
-                <Alert.Title>{t('auth.noAuthTitle')}</Alert.Title>
-                <Alert.Description>{t('auth.noAuthBody')}</Alert.Description>
-              </Alert.Content>
-            </Alert>
-          )}
           {error && <Alert status="danger" role="alert"><Alert.Content><Alert.Description>{error}</Alert.Description></Alert.Content></Alert>}
         </div>
 
@@ -41,13 +31,13 @@ export default function LoginPage() {
           if (pending) return;
           setPending(true);
           setError('');
-          try { await login(token); navigate('/', { replace: true }); }
-          catch (cause) { setError(errorText(cause)); }
+          try { await login(password); navigate('/', { replace: true }); }
+          catch (cause) { setError(cause instanceof ApiError && cause.status === 401 ? t('auth.invalid') : errorText(cause)); }
           finally { setPending(false); }
         }}>
-          <TextField className="w-full" value={token} onChange={setToken} isRequired={authRequired === true} type="password" autoComplete="off">
-            <Label>{t('auth.token')}</Label>
-            <Input autoFocus placeholder={authRequired ? t('auth.placeholderToken') : t('auth.tokenOptional')} />
+          <TextField className="w-full" value={password} onChange={setPassword} isRequired type="password" autoComplete="current-password">
+            <Label>{t('auth.password')}</Label>
+            <Input autoFocus placeholder={t('auth.placeholderPassword')} />
           </TextField>
           <Button type="submit" variant="primary" className="w-full" isDisabled={pending}>{pending ? t('auth.verifying') : t('auth.enter')}</Button>
         </Form>

@@ -1,5 +1,6 @@
 import type { BotConfig, ProviderConfig } from '../../contracts';
 import type { TFunction } from '../i18n';
+import { randomId } from '../lib/random';
 
 export const PROVIDER_APIS = ['openai-completions', 'openai-responses', 'anthropic-messages'] as const;
 type ModelConfig = ProviderConfig['models'][number];
@@ -22,7 +23,7 @@ export interface ProviderDraft {
 }
 
 function randomSuffix(): string {
-  try { return crypto.randomUUID().slice(0, 4); } catch { return Math.random().toString(36).slice(2, 6); }
+  return randomId().slice(0, 4);
 }
 
 function providerId(name: string): string {

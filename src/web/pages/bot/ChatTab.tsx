@@ -10,6 +10,7 @@ import type { Message, SideTab } from '../../lib/types';
 import { errorText, request, segment, uploadComposerFiles } from '../../lib/api';
 import { formatBytes } from '../../lib/format';
 import { botColor } from '../../lib/bot-theme';
+import { randomId } from '../../lib/random';
 import { useAuth } from '../../auth/AuthContext';
 import { useLive } from '../../state/LiveContext';
 import { useI18n } from '../../i18n';
@@ -215,7 +216,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
       const next: PendingAttachment[] = uploaded.map((item, index) => {
         const source = chosen[index];
         return {
-          id: crypto.randomUUID(),
+          id: randomId(),
           name: item.name,
           size: item.size,
           mime: item.mime,

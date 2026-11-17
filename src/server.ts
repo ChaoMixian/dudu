@@ -56,6 +56,7 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
     queueMicrotask(() => scheduler.notify(event.botId));
   });
   const json=(body:unknown,status=200)=>Response.json(body,{status});
+  const createToken=()=>`${crypto.randomUUID().replace(/-/g,'')}${crypto.randomUUID().replace(/-/g,'')}`;
   const advancedMode=()=>config.global().advancedMode===true;
   const requireAdvanced=()=>advancedMode()?null:json({error:'Advanced mode is disabled'},403);
   const formFiles=(form:FormData)=>form.getAll('files').filter((value):value is File => !!value && typeof value==='object' && typeof (value as File).arrayBuffer==='function');
@@ -113,11 +114,32 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
   };
   async function handle(req:Request):Promise<Response> { const url=new URL(req.url);const path=url.pathname;try {
     if(path==='/healthz')return json({ok:true});
-    if(path.startsWith('/api/')) {const token=config.global().token??process.env.DUDU_TOKEN;
+    if(path.startsWith('/api/')) {const current=config.global();const token=current.token??process.env.DUDU_TOKEN;const authRequired=!!token||!!current.passwordHash;
       const liveProxyPath=/^\/api\/bots\/[^/]+\/computer\/live\/[^/]+(?:\/|$)/.test(path);
       const terminalWsPath=/^\/api\/bots\/[^/]+\/terminal\/ws$/.test(path);
-      if(path==='/api/auth/status')return json({authRequired:!!token});
-      if(token&&!liveProxyPath&&!terminalWsPath&&req.headers.get('authorization')!==`Bearer ${token}`&&!(path==='/api/stream'&&url.searchParams.get('token')===token))return json({error:'Unauthorized'},401);
+      if(path==='/api/auth/status')return json({authRequired});
+      if(path==='/api/auth/login'&&req.method==='POST') {
+        const v=object(await req.json());
+        const password=typeof v.password==='string'?v.password.trim():'';
+        let valid=false;
+        if(current.passwordHash) valid=await Bun.password.verify(password,current.passwordHash).catch(()=>false);
+        else if(token) valid=password===token;
+        else valid=!authRequired;
+        if(!valid)return json({error:'Invalid password'},401);
+        let accessToken=token;
+        if(!accessToken&&current.passwordHash) {
+          const latest=config.global();
+          accessToken=latest.token??process.env.DUDU_TOKEN;
+          if(!accessToken) {
+            accessToken=createToken();
+            config.setGlobal({...latest,token:accessToken});
+            systemEvent('config.changed',{section:'auth'});
+          }
+        }
+        return json({token:accessToken??''});
+      }
+      const authorized=!!token&&req.headers.get('authorization')===`Bearer ${token}`;
+      if(authRequired&&!liveProxyPath&&!terminalWsPath&&!authorized&&!(path==='/api/stream'&&url.searchParams.get('token')===token))return json({error:'Unauthorized'},401);
       if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{'access-control-allow-methods':'GET,POST,PUT,DELETE,OPTIONS','access-control-allow-headers':'content-type,authorization,last-event-id','access-control-max-age':'600'}});
       const parts=path.split('/').filter(Boolean);const data=async()=>object(await req.json());
       if(liveProxyPath)return await proxyLive(req,url,parts);
@@ -132,7 +154,7 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         const upgraded=httpServer.upgrade(req,{data:{mode:'terminal',botId:ticket.botId,desktopId:ticket.desktopId,pid:ticket.pid}});
         return upgraded?undefined as unknown as Response:json({error:'WebSocket upgrade failed'},400);
       }
-      if(path==='/api/state') {const c=config.global();return json({bots:config.bots(),connectors:registry.list(),sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,advancedMode:c.advancedMode===true,profile:c.profile??{},statuses:config.bots().map(b=>scheduler.status(b.id)),messages:store.messages(),botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});}
+      if(path==='/api/state') {const c=config.global();return json({bots:config.bots(),connectors:registry.list(),sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,advancedMode:c.advancedMode===true,setupCompleted:c.setupCompleted===true,profile:c.profile??{},statuses:config.bots().map(b=>scheduler.status(b.id)),messages:store.messages(),botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});}
       if(path==='/api/events'&&req.method==='POST')return json(submit(await data()),202);
       if(path==='/api/events'&&req.method==='GET')return json(store.replay(Number(url.searchParams.get('after')??0)));
       if(path==='/api/stream') {const after=Number(req.headers.get('last-event-id')??url.searchParams.get('after')??0);if(!Number.isSafeInteger(after)||after<0)throw new Error('Invalid SSE cursor');const encoder=new TextEncoder();let cleanup=()=>{};const stream=new ReadableStream<Uint8Array>({start(controller){let cursor=after;const send=(e:DuduEvent)=>{if(e.seq<=cursor)return;cursor=e.seq;controller.enqueue(encoder.encode(`id: ${e.seq}\nevent: update\ndata: ${JSON.stringify(e)}\n\n`));};let page:DuduEvent[];do{page=store.replay(cursor);for(const e of page)send(e);}while(page.length===500);const listener=(e:DuduEvent)=>send(e);store.listeners.add(listener);const timer=setInterval(()=>controller.enqueue(encoder.encode(': heartbeat\n\n')),15000);cleanup=()=>{clearInterval(timer);store.listeners.delete(listener);};req.signal.addEventListener('abort',()=>{cleanup();try{controller.close();}catch{}},{once:true});},cancel(){cleanup();}});return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-cache','connection':'keep-alive'}});}
@@ -229,10 +251,22 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
       if(path==='/api/profile'&&req.method==='PUT'){const v=await data();const name=typeof v.name==='string'?v.name.trim():'';if(name.length>80)throw new Error('Name is too long');const avatar=typeof v.avatar==='string'&&v.avatar? v.avatar: undefined;if(avatar&&avatar.length>2_000_000)throw new Error('Avatar is too large');if(avatar&&!/^data:image\/(?:png|jpe?g|webp|gif|svg\+xml)[;,]/.test(avatar)&&!/^https?:\/\//.test(avatar))throw new Error('Invalid avatar');const avatarStyle=typeof v.avatarStyle==='string'&&/^[a-z0-9-]{1,32}$/.test(v.avatarStyle)?v.avatarStyle:undefined;const avatarPreset=typeof v.avatarPreset==='string'&&/^[a-z0-9-]{1,32}$/.test(v.avatarPreset)?v.avatarPreset:undefined;const profile={...(name?{name}:{}),...(avatar?{avatar}:{}),...(avatarStyle?{avatarStyle}:{}),...(avatarPreset?{avatarPreset}:{})};config.setGlobal({...config.global(),profile});systemEvent('config.changed',{section:'profile'});return json({profile});}
       if(path==='/api/computer-settings'&&req.method==='PUT'){const v=await data();if(typeof v.autoStart!=='boolean')throw new Error('autoStart must be a boolean');config.setGlobal({...config.global(),autoStartComputers:v.autoStart});systemEvent('config.changed',{section:'computer',autoStart:v.autoStart});return json({autoStartComputers:v.autoStart});}
       if(path==='/api/advanced-settings'&&req.method==='PUT'){const v=await data();if(typeof v.advancedMode!=='boolean')throw new Error('advancedMode must be a boolean');config.setGlobal({...config.global(),advancedMode:v.advancedMode});systemEvent('config.changed',{section:'advanced',advancedMode:v.advancedMode});return json({advancedMode:v.advancedMode});}
+      if(path==='/api/setup/password'&&req.method==='PUT'){
+        const v=await data();
+        const password=typeof v.password==='string'?v.password.trim():'';
+        if(password.length<6||password.length>128)throw new Error('Password must be 6-128 characters');
+        const current=config.global();
+        const accessToken=current.token??createToken();
+        const passwordHash=await Bun.password.hash(password);
+        config.setGlobal({...current,token:accessToken,passwordHash});
+        systemEvent('config.changed',{section:'auth'});
+        return json({token:accessToken});
+      }
+      if(path==='/api/setup'&&req.method==='PUT'){const v=await data();if(typeof v.completed!=='boolean')throw new Error('completed must be a boolean');config.setGlobal({...config.global(),setupCompleted:v.completed});systemEvent('config.changed',{section:'setup',setupCompleted:v.completed});return json({setupCompleted:v.completed});}
       if(path==='/api/providers/models'&&req.method==='POST'){const v=await data();const baseUrl=text(v.baseUrl,'baseUrl');const target=new URL(baseUrl);if(!['http:','https:'].includes(target.protocol))throw new Error('baseUrl must be an HTTP(S) URL');if(!['openai-completions','openai-responses','anthropic-messages'].includes(v.api))throw new Error('Unsupported provider API');
         const base=baseUrl.replace(/\/+$/,'');const endpoint=base.endsWith('/v1')?`${base}/models`:`${base}/v1/models`;const headers:Record<string,string>={accept:'application/json'};const key=typeof v.apiKey==='string'?v.apiKey.trim():'';
         if(v.api==='anthropic-messages'){if(key)headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';}else if(key)headers.authorization=`Bearer ${key}`;
-        const response=await fetch(endpoint,{headers,signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error(`Model discovery failed: HTTP ${response.status} ${response.statusText}`.trim());
+        const response=await fetch(endpoint,{headers,signal:AbortSignal.any([req.signal,AbortSignal.timeout(15000)])});if(!response.ok)throw new Error(`Model discovery failed: HTTP ${response.status} ${response.statusText}`.trim());
         const payload=await response.json() as {data?:unknown[];models?:unknown[]};const rows=Array.isArray(payload.data)?payload.data:Array.isArray(payload.models)?payload.models:[];
         const models=rows.map(row=>typeof row==='string'?{id:row,name:row}:{id:(row as any)?.id,name:(row as any)?.name??(row as any)?.display_name??(row as any)?.id}).filter((model):model is {id:string;name:string}=>typeof model.id==='string'&&model.id.length>0);
         return json({models});}

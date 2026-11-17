@@ -1,5 +1,6 @@
 import { Avatar, Style } from '@dicebear/core';
 import gazeDefinition from '@dicebear/styles/gaze.json';
+import { randomId } from './random';
 
 export interface ProfileAvatarStyle {
   id: string;
@@ -130,7 +131,7 @@ function loadStyle(styleId: string): Promise<Style> {
 }
 
 function randomSeed(): string {
-  try { return crypto.randomUUID().slice(0, 8); } catch { return Math.random().toString(36).slice(2, 10); }
+  return randomId().slice(0, 8);
 }
 
 export async function renderAvatar(styleId: string, presetId: string, seed: string, size = 160): Promise<string> {

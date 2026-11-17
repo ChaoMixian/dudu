@@ -19,7 +19,22 @@ function computerConfig(value: unknown, botId: string): ComputerConfig {
 }
 export class ConfigStore {
   root: string;
-  constructor(root = workspaceRoot()) { this.root=workspaceRoot(root); for(const p of ['bots','connectors','.dudu']) mkdirSync(join(this.root,p),{recursive:true}); if(!existsSync(this.globalPath)) saveJson(this.globalPath,{host:'127.0.0.1',port:7331,providers:[],autoStartComputers:true}); }
+  constructor(root = workspaceRoot()) {
+    this.root=workspaceRoot(root);
+    for(const p of ['bots','connectors','.dudu']) mkdirSync(join(this.root,p),{recursive:true});
+    if(!existsSync(this.globalPath)) {
+      saveJson(this.globalPath,{host:'127.0.0.1',port:7331,providers:[],autoStartComputers:true,setupCompleted:false});
+    } else {
+      const current=this.global();
+      if(typeof current.setupCompleted!=='boolean') {
+        // Existing workspaces predate the setup gate. Treat a workspace that
+        // already has a Bot or provider as configured; keep fresh ones pending.
+        const configured=(Array.isArray(current.providers)&&current.providers.length>0) || readdirSync(join(this.root,'bots'),{withFileTypes:true})
+          .some(entry=>entry.isDirectory()&&existsSync(join(this.root,'bots',entry.name,'bot.json')));
+        saveJson(this.globalPath,{...current,setupCompleted:configured});
+      }
+    }
+  }
   get globalPath() { return join(this.root,'.dudu/config.json'); }
   global(): GlobalConfig { return JSON.parse(readFileSync(this.globalPath,'utf8')); }
   setGlobal(config: GlobalConfig) { if(!Number.isInteger(config.port)||config.port<1||config.port>65535) throw new Error('Invalid port'); saveJson(this.globalPath,config); }

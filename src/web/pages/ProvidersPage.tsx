@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, AlertDialog, Button, Checkbox, Chip, EmptyState, Form, Input, Label, ListBox, Modal, Select, Spinner, TextField } from '@heroui/react';
 import { ChevronDown, Pencil, Plus, RefreshCw, Save, Server, Trash2 } from 'lucide-react';
 import type { ProviderConfig } from '../../contracts';
-import { errorText, request } from '../lib/api';
+import { discoverProviderModels, errorText, request } from '../lib/api';
 import { useI18n } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
 import { useLive } from '../state/LiveContext';
@@ -119,11 +119,11 @@ export default function ProvidersPage({ onDirtyChange, onPendingChange }: Provid
     setDiscovery(null);
     setDiscovering(true);
     try {
-      const result = await request<{ models: { id: string; name: string }[] }>(token, '/providers/models', 'POST', {
+      const models = await discoverProviderModels(token, {
         api: editor.draft.api, baseUrl: editor.draft.baseUrl, apiKey: editor.draft.apiKey,
       });
       const existing = new Set(editor.draft.models.map(model => model.id.trim()).filter(Boolean));
-      const additions = result.models.filter(model => !existing.has(model.id));
+      const additions = models.filter(model => !existing.has(model.id));
       if (!additions.length) {
         setDiscovery({ text: t('providers.noNewModels'), error: false });
         return;

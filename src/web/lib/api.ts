@@ -1,5 +1,5 @@
 import type { AppState } from './types';
-import type { UploadedWorkspaceFile, WorkspaceEntry } from '../../contracts';
+import type { ProviderConfig, UploadedWorkspaceFile, WorkspaceEntry } from '../../contracts';
 
 const TOKEN_KEY = 'dudu.token';
 
@@ -28,6 +28,10 @@ async function checked(response: Response): Promise<Response> {
 export async function authStatus(): Promise<boolean> {
   const response = await checked(await fetch('/api/auth/status'));
   return (await response.json() as { authRequired: boolean }).authRequired;
+}
+
+export function loginWithPassword(password: string): Promise<string> {
+  return request<{ token: string }>('', '/auth/login', 'POST', { password }).then(result => result.token);
 }
 
 export async function request<T>(token: string, path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
@@ -62,6 +66,7 @@ export const errorText = (error: unknown) => error instanceof Error ? error.mess
 
 function isAppState(value: unknown): value is AppState {
   if (!value || typeof value !== 'object') return false;
+  if (typeof (value as { setupCompleted?: unknown }).setupCompleted !== 'boolean') return false;
   return ['bots', 'connectors', 'sources', 'providers', 'statuses', 'messages', 'desktops']
     .every(key => Array.isArray((value as Record<string, unknown>)[key]));
 }
@@ -135,6 +140,18 @@ export function workspaceBlob(token: string, botId: string, path: string, signal
 
 export function saveAdvancedMode(token: string, advancedMode: boolean): Promise<boolean> {
   return request<{ advancedMode: boolean }>(token, '/advanced-settings', 'PUT', { advancedMode }).then(result => result.advancedMode);
+}
+
+export type DiscoveredModel = { id: string; name: string };
+export type ProviderConnection = Pick<ProviderConfig, 'api' | 'baseUrl' | 'apiKey'>;
+
+export async function discoverProviderModels(token: string, connection: ProviderConnection, signal?: AbortSignal): Promise<DiscoveredModel[]> {
+  const result = await request<{ models: DiscoveredModel[] }>(token, '/providers/models', 'POST', connection, signal);
+  return result.models;
+}
+
+export function completeSetup(token: string): Promise<boolean> {
+  return request<{ setupCompleted: boolean }>(token, '/setup', 'PUT', { completed: true }).then(result => result.setupCompleted);
 }
 
 export type SessionHistoryPage = { entries: unknown[]; cursor: number; hasMore: boolean };

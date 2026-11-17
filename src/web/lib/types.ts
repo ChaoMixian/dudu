@@ -15,8 +15,8 @@ export interface Message {
 export interface Defaults { provider?: string; model?: string }
 export interface AppState {
   bots: BotConfig[]; connectors: ConnectorDefinition[]; sources: SourceConfig[];
-  providers: ProviderConfig[]; defaults: Defaults; autoStartComputers: boolean; advancedMode: boolean;
+  providers: ProviderConfig[]; defaults: Defaults; autoStartComputers: boolean; advancedMode: boolean; setupCompleted: boolean;
   profile: UserProfile;
   statuses: BotStatus[]; messages: Message[]; botThreads: BotThread[]; desktops: DesktopStatus[];
 }
-export const EMPTY_STATE: AppState = { bots: [], connectors: [], sources: [], providers: [], defaults: {}, autoStartComputers: true, advancedMode: false, profile: {}, statuses: [], messages: [], botThreads: [], desktops: [] };
+export const EMPTY_STATE: AppState = { bots: [], connectors: [], sources: [], providers: [], defaults: {}, autoStartComputers: true, advancedMode: false, setupCompleted: false, profile: {}, statuses: [], messages: [], botThreads: [], desktops: [] };

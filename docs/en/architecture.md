@@ -97,11 +97,12 @@ message_send route={kind:'bot'}
 
 ## HTTP API
 
+- `GET /api/auth/status`, `POST /api/auth/login`.
 - `GET /api/state`: config, Bots, messages, Bot threads, connectors, event sources, and status.
 - `POST /api/bots`; `PUT` / `DELETE /api/bots/:id`; `POST /api/bots/:id/pause|resume|stop`.
 - `GET /api/bots/:botId/peers/:peerId/messages`: full Bot-to-Bot history.
 - `POST /api/messages` (optional `attachments`), `POST /api/reactions`.
-- `PUT /api/providers`, `PUT /api/defaults`, `PUT /api/computer-settings` (desktop auto-start), `PUT /api/advanced-settings`.
+- `PUT /api/providers`, `PUT /api/defaults`, `PUT /api/computer-settings` (desktop auto-start), `PUT /api/advanced-settings`, `PUT /api/setup/password`, `PUT /api/setup`.
 - `POST /api/connectors`, `POST /api/sources`, `POST /api/sources/:id/enable|disable|trigger`, `DELETE /api/sources/:id`.
 - Computers: `GET .../computer/status|shot|watch`, `POST .../start|stop|takeover`.
 - Files: `POST .../uploads` (composer), `GET/POST/DELETE .../files`, `POST .../files/mkdir`, `GET .../file`.

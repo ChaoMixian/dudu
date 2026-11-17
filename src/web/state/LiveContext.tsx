@@ -49,8 +49,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     let refreshing = false;
-    setLoaded(false);
-    setState(EMPTY_STATE);
+    // Keep the current snapshot while reconnecting after the setup password
+    // creates the access token; clearing it would unmount the setup route.
     setLiveError('');
 
     const snapshot = async () => {

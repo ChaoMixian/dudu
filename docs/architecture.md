@@ -97,11 +97,12 @@ message_send route={kind:'bot'}
 
 ## HTTP API
 
+- `GET /api/auth/status`，`POST /api/auth/login`。
 - `GET /api/state`：配置、Bot、消息、Bot 线程、连接器、事件源、状态。
 - `POST /api/bots`，`PUT/DELETE /api/bots/:id`，`POST /api/bots/:id/pause|resume|stop`。
 - `GET /api/bots/:botId/peers/:peerId/messages`：Bot 间完整往来。
 - `POST /api/messages`（可带 `attachments`），`POST /api/reactions`。
-- `PUT /api/providers`，`PUT /api/defaults`，`PUT /api/computer-settings`（启动时自动拉起桌面），`PUT /api/advanced-settings`。
+- `PUT /api/providers`，`PUT /api/defaults`，`PUT /api/computer-settings`（启动时自动拉起桌面），`PUT /api/advanced-settings`，`PUT /api/setup/password`，`PUT /api/setup`。
 - `POST /api/connectors`，`POST /api/sources`，`POST /api/sources/:id/enable|disable|trigger`，`DELETE /api/sources/:id`。
 - 电脑：`GET .../computer/status|shot|watch`，`POST .../start|stop|takeover`。
 - 文件：`POST .../uploads`（输入框附件），`GET/POST/DELETE .../files`，`POST .../files/mkdir`，`GET .../file`。

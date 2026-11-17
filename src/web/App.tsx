@@ -1,8 +1,10 @@
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
+import { Alert, Button, Spinner } from '@heroui/react';
 import { useAuth } from './auth/AuthContext';
 import { LiveProvider, useLive } from './state/LiveContext';
 import AppShell from './ui/AppShell';
 import LoginPage from './pages/LoginPage';
+import SetupPage from './pages/SetupPage';
 import BotPage from './pages/BotPage';
 import SettingsPage from './pages/SettingsPage';
 import AutomationsPage from './pages/AutomationsPage';
@@ -47,23 +49,71 @@ function Welcome() {
   );
 }
 
-function Guard({ children }: { children: React.ReactNode }) {
-  const { authenticated, authRequired } = useAuth();
+function AuthUnavailable() {
+  const { authError, retry } = useAuth();
+  const { t } = useI18n();
+  return (
+    <div className="login-page">
+      <section className="login-panel" aria-label={t('app.name')}>
+        <header className="login-brand">
+          <BrandMark size={40} />
+          <h1>dudu</h1>
+        </header>
+        <div className="login-alerts">
+          <Alert status="warning">
+            <Alert.Content>
+              <Alert.Title>{t('auth.unreachable')}</Alert.Title>
+              <Alert.Description>{authError}</Alert.Description>
+            </Alert.Content>
+          </Alert>
+        </div>
+        <Button type="button" variant="primary" className="w-full" onPress={retry}>{t('auth.retry')}</Button>
+      </section>
+    </div>
+  );
+}
+
+function Guard() {
+  const { authenticated, authRequired, authError } = useAuth();
+  if (authError) return <AuthUnavailable />;
   if (authenticated === null && authRequired !== false) return null;
   if (!authenticated) return <LoginPage />;
-  return <LiveProvider>{children}</LiveProvider>;
+  return <LiveProvider><Outlet /></LiveProvider>;
+}
+
+function SetupLoading() {
+  return <div className="setup-page"><div className="setup-shell setup-loading"><Spinner size="lg" /></div></div>;
+}
+
+function SetupRoute() {
+  const { loaded, state } = useLive();
+  if (!loaded) return <SetupLoading />;
+  if (state.setupCompleted) {
+    const bot = state.bots.at(-1);
+    return <Navigate to={bot ? `/bots/${bot.id}` : '/'} replace />;
+  }
+  return <SetupPage />;
+}
+
+function ShellRoute() {
+  const { loaded, state } = useLive();
+  if (loaded && !state.setupCompleted) return <Navigate to="/setup" replace />;
+  return <AppShell />;
 }
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<Guard><AppShell /></Guard>}>
-        <Route path="/" element={<Welcome />} />
-        <Route path="/bots/:botId" element={<BotPage />} />
-        <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
-        <Route path="/settings/:tab" element={<SettingsPage />} />
-        <Route path="/automations" element={<AutomationsPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+      <Route element={<Guard />}>
+        <Route path="/setup" element={<SetupRoute />} />
+        <Route element={<ShellRoute />}>
+          <Route path="/" element={<Welcome />} />
+          <Route path="/bots/:botId" element={<BotPage />} />
+          <Route path="/settings" element={<Navigate to="/settings/profile" replace />} />
+          <Route path="/settings/:tab" element={<SettingsPage />} />
+          <Route path="/automations" element={<AutomationsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
       </Route>
     </Routes>
   );

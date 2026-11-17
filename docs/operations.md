@@ -81,11 +81,11 @@ PATH="$HOME/.cargo/bin:$PATH" bun run start
 | `DUDU_HOST` | API 监听地址，默认 `127.0.0.1` |
 | `DUDU_PORT` | API 端口，默认 `7331` |
 | `DUDU_BOTD_ROOT` | 桌面数据目录，默认 `<workspace>/.dudu/botd` |
-| `DUDU_TOKEN` | Bearer token；也可在 config.json 中设置 |
+| `DUDU_TOKEN` | Bearer token；未设置访问密码时也可作为登录密码；也可在 config.json 中设置 |
 | `DUDU_URL` | CLI 访问的 dudu 地址 |
 | `UI_PREVIEW_PORT` | 隔离 UI 预览端口 |
 
-暴露到局域网或公网前必须设置 token，并配合 HTTPS 反向代理与访问控制。
+暴露到局域网或公网前必须在首次设置中设置访问密码，或至少配置 `DUDU_TOKEN`，并配合 HTTPS 反向代理与访问控制。
 
 ## 模型服务
 

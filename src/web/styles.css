@@ -2074,15 +2074,6 @@ button.message-reaction:focus-visible {
   background: var(--background);
 }
 
-.login-glow {
-  position: absolute;
-  inset: -30%;
-  pointer-events: none;
-  background:
-    radial-gradient(640px 460px at 50% 12%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%),
-    radial-gradient(520px 400px at 88% 92%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 72%);
-}
-
 .login-panel {
   position: relative;
   z-index: 1;
@@ -2147,6 +2138,416 @@ button.message-reaction:focus-visible {
   .login-panel {
     border-radius: 20px;
     padding: 24px 20px 20px;
+  }
+}
+
+/* ---------- First-run setup ---------- */
+
+.setup-page {
+  position: relative;
+  min-height: 100dvh;
+  overflow: auto;
+  padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(36px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  background: var(--background);
+}
+
+.setup-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setup-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 0;
+}
+
+.setup-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.setup-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.setup-card {
+  border: 1px solid var(--separator);
+  border-radius: 24px;
+  background: var(--surface);
+  padding: 30px 32px 26px;
+}
+
+.setup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.setup-head h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.setup-head p {
+  max-width: 500px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.setup-count {
+  flex-shrink: 0;
+  padding-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 23px;
+}
+
+.setup-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.setup-fields.setup-fields-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.setup-hint {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.setup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 25px;
+}
+
+.setup-actions-end {
+  justify-content: flex-end;
+}
+
+.setup-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.setup-back {
+  align-self: flex-start;
+}
+
+.setup-loading {
+  display: grid;
+  min-height: 60vh;
+  place-items: center;
+}
+
+@media (min-width: 640px) {
+  .setup-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .setup-page {
+    padding: max(14px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .setup-shell {
+    gap: 12px;
+  }
+
+  .setup-card {
+    min-width: 0;
+    border-radius: 18px;
+    padding: 22px 16px 20px;
+  }
+
+  .setup-head {
+    gap: 12px;
+  }
+
+  .setup-head > div {
+    min-width: 0;
+  }
+
+  .setup-head h1 {
+    font-size: 22px;
+  }
+
+  .setup-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    margin-top: 12px;
+  }
+
+  .setup-actions-end {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .setup-actions > button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .setup-actions-model {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .setup-actions-model > .setup-back {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .setup-actions-model .setup-actions-right {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 10px;
+    margin-left: 0;
+  }
+
+  .setup-actions-model .setup-actions-right > button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .setup-page .avatar-picker-head {
+    flex-wrap: wrap;
+  }
+
+  .setup-page .avatar-picker-head > .bot-avatar-lg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .setup-page .avatar-picker-head > button {
+    margin-left: auto;
+  }
+
+  .setup-page .color-swatches {
+    flex-wrap: wrap;
+  }
+
+  .setup-welcome-reduced {
+    width: 66%;
+  }
+
+  .setup-done > button {
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+.setup-model-discovery {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setup-model-discovery .setup-hint {
+  margin: 0;
+}
+
+.setup-model-discovery [role="alert"] {
+  overflow-wrap: anywhere;
+}
+
+.setup-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 28px 0 8px;
+  text-align: center;
+}
+
+.setup-done .bot-avatar-lg {
+  width: 76px;
+  height: 76px;
+  font-size: 30px;
+}
+
+.setup-welcome-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  background: var(--background);
+  transition: opacity 450ms ease, transform 450ms ease;
+}
+
+.setup-welcome-stage[data-leaving="true"] {
+  opacity: 0;
+  transform: scale(1.025);
+  pointer-events: none;
+}
+
+.setup-welcome-stage canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.setup-welcome-color {
+  z-index: 0;
+}
+
+.setup-welcome-avatars {
+  z-index: 1;
+}
+
+.setup-welcome-reduced {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46%;
+  max-height: 34%;
+  overflow: visible;
+  transform: translate(-50%, -50%);
+}
+
+.setup-welcome-continue {
+  position: absolute;
+  z-index: 3;
+  top: calc(50% + min(24vh, 210px));
+  left: 50%;
+  border: 1px solid color-mix(in oklab, var(--accent) 42%, var(--separator));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 14%, rgb(10 17 20 / 0.72));
+  padding: 10px 24px;
+  color: #f5f7f6;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transform: translateX(-50%);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 0.32);
+  backdrop-filter: blur(14px);
+  animation: setup-continue-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.setup-welcome-continue:hover {
+  background: color-mix(in oklab, var(--accent) 24%, rgb(10 17 20 / 0.72));
+}
+
+@keyframes setup-continue-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.setup-meteors {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.setup-meteor {
+  position: absolute;
+  top: var(--meteor-top);
+  left: calc(-1 * var(--meteor-size) - 110px);
+  width: var(--meteor-size);
+  height: var(--meteor-size);
+  animation: setup-meteor-ltr var(--meteor-duration) linear forwards;
+  will-change: transform;
+}
+
+.setup-meteor[data-direction="rtl"] {
+  right: calc(-1 * var(--meteor-size) - 110px);
+  left: auto;
+  animation-name: setup-meteor-rtl;
+}
+
+.setup-meteor img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--surface-secondary);
+  box-shadow: 0 0 16px color-mix(in oklab, var(--accent) 42%, transparent);
+}
+
+.setup-meteor::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 100px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 65%, transparent));
+  transform: translateY(-50%);
+}
+
+.setup-meteor[data-direction="rtl"]::before {
+  right: auto;
+  left: 100%;
+  transform: translateY(-50%) rotate(180deg);
+}
+
+@keyframes setup-meteor-ltr {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(-14deg); }
+  12% { opacity: 0.7; }
+  100% { opacity: 0; transform: translate3d(calc(100vw + 180px), var(--meteor-drift), 0) rotate(-14deg); }
+}
+
+@keyframes setup-meteor-rtl {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(14deg); }
+  12% { opacity: 0.7; }
+  100% { opacity: 0; transform: translate3d(calc(-100vw - 180px), var(--meteor-drift), 0) rotate(14deg); }
+}
+
+@media (max-width: 640px) {
+  .setup-done .bot-avatar-lg {
+    width: 66px;
+    height: 66px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setup-meteor {
+    display: none;
   }
 }
 
