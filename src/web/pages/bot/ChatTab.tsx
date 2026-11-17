@@ -4,7 +4,7 @@ import Markdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { Button, Dropdown, Spinner, TextArea, TextField, Tooltip } from '@heroui/react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { BotConfig } from '../../../contracts';
 import type { Message, SideTab } from '../../lib/types';
 import { errorText, request, segment, uploadComposerFiles } from '../../lib/api';
@@ -68,7 +68,7 @@ function TypingIndicator({ summary, toolName, startedAt }: { summary?: string; t
 }
 
 export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPanel }: ChatTabProps) {
-  const { state, run, busy } = useLive();
+  const { state, run, busy, loadOlderMessages } = useLive();
   const { token } = useAuth();
   const { t, locale } = useI18n();
   const navigate = useNavigate();
@@ -81,8 +81,17 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
   const sendingRef = useRef(new Set<string>());
   const composingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
   const displayedBotRef = useRef(bot.id);
+  const olderRequests = useRef(new Set<string>());
+  const restoreScroll = useRef<{ botId: string; node: HTMLElement; top: number } | null>(null);
+  const [historyError, setHistoryError] = useState('');
+  const [searchParams] = useSearchParams();
+  const jumpSeq = Number(searchParams.get('message'));
+  const jumpRef = useRef<{ botId: string; seq: number; loading: boolean; done: boolean } | null>(null);
+  const [jumpTick, setJumpTick] = useState(0);
   const [showJump, setShowJump] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [threadPeer, setThreadPeer] = useState<BotConfig | null>(null);
@@ -124,7 +133,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
     }
     return new Map([...byTarget].map(([target, counts]) => [target, [...counts].map(([emoji, value]) => ({ emoji, ...value }))]));
   }, [conversation]);
-  const messageById = useMemo(() => new Map(conversation.map(message => [message.id, message])), [conversation]);
+  const messageById = useMemo(() => new Map([...(state.messageReferences ?? []), ...conversation].map(message => [message.id, message])), [conversation, state.messageReferences]);
   const lastUserSeq = useMemo(() => messages.reduce((latest, message) => message.sender === 'user' ? Math.max(latest, message.seq) : latest, 0), [messages]);
   const threads = useMemo(() => (state.botThreads ?? []).filter(thread => thread.botId === bot.id && thread.peerId !== bot.id && state.bots.some(entry => entry.id === thread.peerId)), [state.botThreads, state.bots, bot.id]);
   const peerFor = (peerId: string | undefined) => peerId ? state.bots.find(entry => entry.id === peerId) : undefined;
@@ -155,24 +164,89 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
     year: 'numeric', month: 'short', day: 'numeric',
   }), [dateLocale]);
 
+  const captureScrollAnchor = (botId: string) => {
+    if (displayedBotRef.current !== botId || nearBottomRef.current) return;
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    const node = [...viewport.querySelectorAll<HTMLElement>('[data-message-id]')]
+      .find(node => node.getBoundingClientRect().bottom >= viewport.getBoundingClientRect().top);
+    if (node) restoreScroll.current = { botId, node, top: node.getBoundingClientRect().top };
+  };
+
+  const loadOlder = async () => {
+    const cursor = state.messageCursors?.[bot.id];
+    if (!cursor || olderRequests.current.has(bot.id)) return;
+    const botId = bot.id;
+    olderRequests.current.add(botId);
+    setHistoryError('');
+    try {
+      await loadOlderMessages(botId, cursor, () => captureScrollAnchor(botId));
+    } catch (cause) {
+      if (displayedBotRef.current === botId) setHistoryError(errorText(cause));
+    } finally { olderRequests.current.delete(botId); setJumpTick(value => value + 1); }
+  };
+
+  useEffect(() => {
+    const viewport = scrollRef.current;
+    if (viewport && viewport.scrollHeight <= viewport.clientHeight + 320 && !historyError) void loadOlder();
+  }, [bot.id, state.messageCursors?.[bot.id], historyError]);
+
   const jumpToBottom = () => {
     const viewport = scrollRef.current;
     if (!viewport) return;
     nearBottomRef.current = true;
     viewport.scrollTop = viewport.scrollHeight;
+    lastScrollTopRef.current = viewport.scrollTop;
     setShowJump(false);
   };
+
+  useLayoutEffect(() => {
+    if (!Number.isSafeInteger(jumpSeq) || jumpSeq < 1) { jumpRef.current = null; return; }
+    if (jumpRef.current?.botId !== bot.id || jumpRef.current.seq !== jumpSeq) {
+      jumpRef.current = { botId: bot.id, seq: jumpSeq, loading: false, done: false };
+      nearBottomRef.current = false;
+    }
+    const jump = jumpRef.current;
+    if (!jump || jump.done || jump.loading) return;
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    const node = viewport.querySelector<HTMLElement>(`[data-message-seq="${jump.seq}"]`);
+    if (node) {
+      jump.done = true;
+      nearBottomRef.current = false;
+      restoreScroll.current = null;
+      node.scrollIntoView({ block: 'center' });
+      lastScrollTopRef.current = viewport.scrollTop;
+      return;
+    }
+    const cursor = state.messageCursors?.[bot.id];
+    if (!cursor) { jump.done = true; return; }
+    if (olderRequests.current.has(bot.id)) return;
+    olderRequests.current.add(bot.id);
+    jump.loading = true;
+    void loadOlderMessages(bot.id, cursor, () => captureScrollAnchor(bot.id))
+      .catch(cause => { jump.done = true; if (displayedBotRef.current === bot.id) setHistoryError(errorText(cause)); })
+      .finally(() => { jump.loading = false; olderRequests.current.delete(bot.id); setJumpTick(value => value + 1); });
+  }, [bot.id, jumpSeq, messages, state.messageCursors?.[bot.id], loadOlderMessages, jumpTick]);
 
   useLayoutEffect(() => {
     if (displayedBotRef.current !== bot.id) {
       displayedBotRef.current = bot.id;
       nearBottomRef.current = true;
       composingRef.current = false;
+      restoreScroll.current = null;
+      setHistoryError('');
     }
     const viewport = scrollRef.current;
     if (!viewport) return;
-    if (nearBottomRef.current) {
+    const restore = restoreScroll.current;
+    if (restore?.botId === bot.id) {
+      viewport.scrollTop += restore.node.getBoundingClientRect().top - restore.top;
+      lastScrollTopRef.current = viewport.scrollTop;
+      restoreScroll.current = null;
+    } else if (nearBottomRef.current) {
       viewport.scrollTop = viewport.scrollHeight;
+      lastScrollTopRef.current = viewport.scrollTop;
       setShowJump(false);
     } else {
       setShowJump(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > BOTTOM_THRESHOLD);
@@ -182,14 +256,18 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
   useEffect(() => {
     const viewport = scrollRef.current;
     if (!viewport) return;
-    // Resizing the composer or mobile keyboard must not pull a reader away
-    // from history; follow the latest message only when already near bottom.
+    // Follow async content and viewport resizing only while already near bottom;
+    // a reader browsing history must keep their position.
     const observer = new ResizeObserver(() => {
-      if (nearBottomRef.current) viewport.scrollTop = viewport.scrollHeight;
+      if (nearBottomRef.current) {
+        viewport.scrollTop = viewport.scrollHeight;
+        lastScrollTopRef.current = viewport.scrollTop;
+      }
       setShowJump(!nearBottomRef.current
         && viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop > BOTTOM_THRESHOLD);
     });
     observer.observe(viewport);
+    if (contentRef.current) observer.observe(contentRef.current);
     return () => observer.disconnect();
   }, []);
 
@@ -442,6 +520,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
     // The composer has just changed height; keep the last message at the same
     // distance from the composer instead of leaving it clipped behind it.
     viewport.scrollTop = viewport.scrollHeight;
+    lastScrollTopRef.current = viewport.scrollTop;
   }, [text, composerStacked]);
 
   useEffect(() => {
@@ -531,12 +610,18 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
         onScroll={event => {
           const viewport = event.currentTarget;
           const nearBottom = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= BOTTOM_THRESHOLD;
-          nearBottomRef.current = nearBottom;
-          setShowJump(!nearBottom);
+          // Content growth can dispatch scroll without moving the viewport,
+          // before ResizeObserver gets a chance to preserve bottom-following.
+          if (viewport.scrollTop !== lastScrollTopRef.current) nearBottomRef.current = nearBottom;
+          lastScrollTopRef.current = viewport.scrollTop;
+          setShowJump(!nearBottomRef.current);
+          if (viewport.scrollTop < 800 && !historyError) void loadOlder();
         }}
       >
+        <div ref={contentRef} className="flex min-h-full flex-col">
+        {historyError && <div className="flex items-center justify-center gap-2 p-2 text-xs text-muted" role="alert"><span>{t('message.historyFailed')}</span><button type="button" className="underline" onClick={() => void loadOlder()}>{t('common.retry')}</button></div>}
         {!messages.length ? (
-          <div className="flex min-h-full items-center justify-center p-6">
+          <div className="flex flex-1 items-center justify-center p-6">
             <div className="flex max-w-sm flex-col items-center gap-3 text-center">
               <BotAvatar name={bot.name} avatar={bot.avatar} color={bot.color} size="lg" />
               <h2 className="text-xl font-semibold tracking-tight">{bot.name}</h2>
@@ -557,7 +642,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
                 if (!peer || peer.id === bot.id) return null;
                 return <Fragment key={`${bot.id}:${message.id}`}>
                   {separates && <div className="my-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted"><time dateTime={message.createdAt}>{timestamp(date)}</time></div>}
-                  <div className="bot-thread-notice-row">
+                  <div className="bot-thread-notice-row" data-message-seq={message.seq}>
                     <button type="button" className="bot-thread-notice" onClick={() => openThread(peer, { from: message.sender, text: message.text, createdAt: message.createdAt })}>
                       <BotAvatar name={peer.name} avatar={peer.avatar} color={peer.color} size="xs" />
                       <span>{t(message.kind === 'bot_out' ? 'message.sentTo' : 'message.receivedFrom', { name: peer.name })}</span>
@@ -585,6 +670,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
                         className={`chat-bubble-wrap ${messageReactions?.length ? 'has-reactions' : ''}`}
                         data-react-side={own ? 'left' : 'right'}
                         data-message-id={message.id}
+                        data-message-seq={message.seq}
                         data-selecting={selectingId === message.id ? 'true' : undefined}
                         onContextMenu={event => {
                           const touch = (event.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents === true;
@@ -672,6 +758,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
             {thinking && <TypingIndicator summary={activitySummary} toolName={activityTool} startedAt={activityStartedAt} />}
           </div>
         )}
+        </div>
       </div>
 
       <div className="chat-composer relative mx-auto w-full max-w-4xl shrink-0 px-4 md:px-8" aria-busy={sending}>

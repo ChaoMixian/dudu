@@ -96,8 +96,9 @@ export async function streamEvents(token: string, signal: AbortSignal, onChange:
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-export async function loadState(token: string, signal?: AbortSignal): Promise<AppState> {
-  const state = await request<unknown>(token, '/state', 'GET', undefined, signal);
+export async function loadState(token: string, signal?: AbortSignal, messageAfter: Record<string, number> = {}): Promise<AppState> {
+  const query = new URLSearchParams({ messageAfter: JSON.stringify(messageAfter) });
+  const state = await request<unknown>(token, `/state?${query}`, 'GET', undefined, signal);
   if (!isAppState(state)) throw new Error('状态响应结构不完整');
   return state;
 }

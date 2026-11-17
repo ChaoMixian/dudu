@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, errorText, loadState, request, streamEvents } from '../lib/api';
-import { EMPTY_STATE, type AppState } from '../lib/types';
+import { mergeMessagePage, mergeMessageState } from '../lib/message-state';
+import { EMPTY_STATE, type AppState, type MessagePage } from '../lib/types';
 import { useAuth } from '../auth/AuthContext';
 
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting';
@@ -14,6 +15,7 @@ interface LiveValue {
   busy: string;
   toasts: Toast[];
   refresh: () => Promise<void>;
+  loadOlderMessages: (botId: string, before: number, beforeMerge: () => void) => Promise<MessagePage>;
   /** 执行一次修改操作：成功弹通知并刷新，失败弹错误通知；返回是否成功 */
   run: (label: string, work: () => Promise<unknown>) => Promise<boolean>;
   notify: (kind: Toast['kind'], text: string) => void;
@@ -31,6 +33,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const busyRef = useRef(false);
+  const messageAfter = useRef<Record<string, number>>({});
 
   const notify = useCallback((kind: Toast['kind'], text: string) => {
     const id = ++toastSeq;
@@ -39,9 +42,22 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    const next = await loadState(token);
-    setState(next);
+    const initial = Object.keys(messageAfter.current).length === 0;
+    const next = await loadState(token, undefined, messageAfter.current);
+    const botIds = new Set(next.bots.map(bot => bot.id));
+    for (const botId of Object.keys(messageAfter.current)) if (!botIds.has(botId)) delete messageAfter.current[botId];
+    for (const message of next.messages) {
+      if (message.kind !== 'reaction') messageAfter.current[message.botId] = Math.max(messageAfter.current[message.botId] ?? 0, message.seq);
+    }
+    setState(current => initial ? next : mergeMessageState(current, next));
     setLoaded(true);
+  }, [token]);
+
+  const loadOlderMessages = useCallback(async (botId: string, before: number, beforeMerge: () => void) => {
+    const page = await request<MessagePage>(token, `/bots/${encodeURIComponent(botId)}/messages?before=${before}`);
+    beforeMerge();
+    setState(current => mergeMessagePage(current, botId, page));
+    return page;
   }, [token]);
 
   useEffect(() => {
@@ -102,8 +118,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   }, [notify, refresh]);
 
   const value = useMemo<LiveValue>(() => ({
-    state, loaded, live, liveError, busy, toasts, refresh, run, notify,
-  }), [state, loaded, live, liveError, busy, toasts, refresh, run, notify]);
+    state, loaded, live, liveError, busy, toasts, refresh, loadOlderMessages, run, notify,
+  }), [state, loaded, live, liveError, busy, toasts, refresh, loadOlderMessages, run, notify]);
 
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

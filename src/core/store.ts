@@ -1,7 +1,11 @@
 import { Database } from 'bun:sqlite';
 import { eventInput, type BotThread, type BotThreadMessage, type DuduEvent, type EventInput, type InboxStatus, type MessageAttachment, type MessageKind, type Route } from '../contracts';
 export interface Message { id:string; botId:string; conversationId:string; sender:string; text:string; kind:MessageKind; options?:string[]; targetId?:string; emoji?:string; replyTo?:string; attachments?:MessageAttachment[]; status:string; createdAt:string; seq:number }
+type MessageRow = Omit<Message,'options'|'attachments'> & {options:string|null;attachments:string|null};
+const MESSAGE_COLUMNS = 'id,bot_id AS botId,conversation_id AS conversationId,sender,text,kind,options,target_id AS targetId,emoji,reply_to AS replyTo,attachments,status,created_at AS createdAt,seq';
+const decodeMessage = ({options,attachments,...row}:MessageRow):Message => ({...row,...(options?{options:JSON.parse(options)}:{}),...(attachments?{attachments:JSON.parse(attachments)}:{})});
 const BOT_PAIR_LIMIT = 20;
+const MESSAGE_PAGE_SIZE = 50;
 export class Store {
   db: Database;
   listeners=new Set<(event:DuduEvent)=>void>();
@@ -25,7 +29,7 @@ export class Store {
     for (const [name, type] of [['options','TEXT'],['kind',"TEXT NOT NULL DEFAULT 'message'"],['target_id','TEXT'],['emoji','TEXT'],['reply_to','TEXT'],['attachments','TEXT']] as const) {
       if (!columns.some(column => column.name === name)) this.db.exec(`ALTER TABLE messages ADD COLUMN ${name} ${type};`);
     }
-    this.db.exec("UPDATE messages SET kind='message' WHERE kind IS NULL OR kind='';");
+    this.db.exec("UPDATE messages SET kind='message' WHERE kind IS NULL OR kind=''; CREATE INDEX IF NOT EXISTS messages_timeline ON messages(bot_id,conversation_id,seq); CREATE INDEX IF NOT EXISTS messages_target ON messages(target_id);");
   }
   publish(input:EventInput): {event:DuduEvent; duplicate:boolean} { const v=eventInput(input); const event={...v,eventId:v.eventId??crypto.randomUUID(),priority:v.priority??'normal',createdAt:new Date().toISOString(),delivery:v.delivery??'wake',seq:0} as DuduEvent;
     const result=this.db.transaction(()=>{ const previous=this.db.query('SELECT seq,body FROM events WHERE event_id=? OR (bot_id=? AND source_id=? AND dedupe_key=?)').get(event.eventId,event.botId,event.sourceId,event.dedupeKey??null) as {seq:number;body:string}|null; if(previous){const body=JSON.parse(previous.body);return {event:{...body,delivery:body.delivery??(body.wake===false?'ignore':'wake'),seq:previous.seq} as DuduEvent,duplicate:true};}
@@ -43,8 +47,27 @@ export class Store {
   status(eventId:string) { return this.db.query('SELECT status,error FROM events WHERE event_id=?').get(eventId); }
   session(botId:string):string|undefined { return (this.db.query('SELECT path FROM sessions WHERE bot_id=?').get(botId) as {path:string}|null)?.path; }
   setSession(botId:string,path:string) { this.db.query('INSERT INTO sessions VALUES(?,?) ON CONFLICT(bot_id) DO UPDATE SET path=excluded.path').run(botId,path); }
-  messages():Message[] { const rows=this.db.query('SELECT id,bot_id AS botId,conversation_id AS conversationId,sender,text,kind,options,target_id AS targetId,emoji,reply_to AS replyTo,attachments,status,created_at AS createdAt,seq FROM messages ORDER BY seq').all() as (Omit<Message,'options'|'kind'|'attachments'> & {options:string|null; kind:string|null; attachments:string|null})[]; return rows.map(({options,kind,attachments,...row})=>({...row,kind:(kind||'message') as MessageKind,...(options?{options:JSON.parse(options) as string[]}:{}),...(attachments?{attachments:JSON.parse(attachments) as MessageAttachment[]}:{})})); }
-  messageById(messageId:string):Message|undefined { return this.messages().find(message=>message.id===messageId); }
+  messages():Message[] { return (this.db.query(`SELECT ${MESSAGE_COLUMNS} FROM messages ORDER BY seq`).all() as MessageRow[]).map(decodeMessage); }
+  messageById(messageId:string):Message|undefined { const row=this.db.query(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE id=?`).get(messageId) as MessageRow|null; return row?decodeMessage(row):undefined; }
+  messagePage(botId:string,before=Number.MAX_SAFE_INTEGER) {
+    const rows=this.db.query(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE bot_id=? AND conversation_id='default' AND kind!='reaction' AND seq<? ORDER BY seq DESC LIMIT ?`).all(botId,before,MESSAGE_PAGE_SIZE+1) as MessageRow[];
+    const visible=rows.slice(0,MESSAGE_PAGE_SIZE).reverse().map(decodeMessage);
+    return {messages:visible,references:this.referencesFor(visible),cursor:rows.length>MESSAGE_PAGE_SIZE&&visible.length?visible[0]!.seq:null};
+  }
+  messagesAfter(botId:string,after:number) {
+    const messages=(this.db.query(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE bot_id=? AND conversation_id='default' AND kind!='reaction' AND seq>? ORDER BY seq`).all(botId,after) as MessageRow[]).map(decodeMessage);
+    return {messages,references:this.referencesFor(messages)};
+  }
+  reactionsForBots(botIds:string[]):Message[] {
+    if(!botIds.length)return [];
+    return (this.db.query(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE kind='reaction' AND conversation_id='default' AND bot_id IN (${botIds.map(()=>'?').join(',')}) ORDER BY seq`).all(...botIds) as MessageRow[]).map(decodeMessage);
+  }
+  private referencesFor(messages:Message[]):Message[] {
+    const ids=[...new Set(messages.flatMap(message=>message.replyTo?[message.replyTo]:[]))];
+    if(!ids.length)return [];
+    return (this.db.query(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE id IN (${ids.map(()=>'?').join(',')})`).all(...ids) as MessageRow[]).map(decodeMessage);
+  }
+  searchMessages(query:string):Message[] { return (this.db.query(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE seq IN (SELECT MAX(seq) FROM messages WHERE conversation_id='default' AND kind!='reaction' AND instr(lower(text),lower(?))>0 GROUP BY bot_id) ORDER BY seq DESC`).all(query) as MessageRow[]).map(decodeMessage); }
   presence(botId:string):{pending:number;running:boolean;lastActiveAt?:string;lastStatus?:string} { const pending=(this.db.query("SELECT COUNT(*) AS n FROM events WHERE bot_id=? AND status='pending' AND delivery='wake'").get(botId) as {n:number}).n; const run=this.db.query("SELECT started_at AS startedAt,ended_at AS endedAt,status FROM runs WHERE bot_id=? ORDER BY started_at DESC LIMIT 1").get(botId) as {startedAt:string;endedAt:string|null;status:string}|null; const lastActiveAt=run?(run.endedAt??run.startedAt):undefined; return {pending,running:run?.status==='running',...(lastActiveAt?{lastActiveAt}:{}),...(run?{lastStatus:run.status}:{})}; }
   deleteBotData(botId:string) { this.db.transaction(()=>{for(const table of ['messages','events','runs','sessions','bot_context'])this.db.query(`DELETE FROM ${table} WHERE bot_id=?`).run(botId);})(); }
   toggleReaction(botId:string,conversationId:string,targetId:string,emoji:string,sender:string):{added:boolean;message?:Message} { const existing=this.db.query("SELECT id FROM messages WHERE bot_id=? AND conversation_id=? AND sender=? AND kind='reaction' AND target_id=? AND emoji=? LIMIT 1").get(botId,conversationId,sender,targetId,emoji) as {id:string}|null; const targetText=this.messageById(targetId)?.text?.slice(0,200); if(existing){this.db.query('DELETE FROM messages WHERE id=?').run(existing.id);this.publish({botId,sourceId:'reaction',type:'message.reaction',payload:{targetId,emoji,added:false,targetText},delivery:'wake'});return {added:false};} const message=this.message(botId,conversationId,sender,'', 'sent', undefined,'reaction',targetId,emoji);this.publish({botId,sourceId:'reaction',type:'message.reaction',payload:{targetId,emoji,added:true,targetText},delivery:'wake'});return {added:true,message}; }

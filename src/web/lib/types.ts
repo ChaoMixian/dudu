@@ -12,11 +12,13 @@ export interface Message {
   text: string; kind: MessageKind; options?: string[]; targetId?: string; emoji?: string; replyTo?: string; attachments?: MessageAttachment[];
   status: MessageStatus; createdAt: string; seq: number;
 }
+export interface MessagePage { messages: Message[]; references: Message[]; cursor: number | null }
 export interface Defaults { provider?: string; model?: string }
 export interface AppState {
   bots: BotConfig[]; connectors: ConnectorDefinition[]; sources: SourceConfig[];
   providers: ProviderConfig[]; defaults: Defaults; autoStartComputers: boolean; advancedMode: boolean; setupCompleted: boolean;
   profile: UserProfile;
+  messageCursors?: Record<string, number | null>; messageReferences?: Message[];
   statuses: BotStatus[]; messages: Message[]; botThreads: BotThread[]; desktops: DesktopStatus[];
 }
 export const EMPTY_STATE: AppState = { bots: [], connectors: [], sources: [], providers: [], defaults: {}, autoStartComputers: true, advancedMode: false, setupCompleted: false, profile: {}, statuses: [], messages: [], botThreads: [], desktops: [] };

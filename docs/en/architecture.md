@@ -98,7 +98,8 @@ message_send route={kind:'bot'}
 ## HTTP API
 
 - `GET /api/auth/status`, `POST /api/auth/login`.
-- `GET /api/state`: config, Bots, messages, Bot threads, connectors, event sources, and status.
+- `GET /api/state`: config, Bots, the latest 50 messages per Bot with reactions, reply references, history cursors, Bot threads, and status. `messageAfter` is a JSON map from Bot IDs to the latest loaded seq, used to fetch only new messages.
+- `GET /api/bots/:botId/messages?before=seq`: backwards pagination, 50 messages per page; returns `messages`, `references`, and `cursor` (`null` at the beginning). `GET /api/messages/search?q=keyword` searches full history and returns the latest match per Bot.
 - `POST /api/bots`; `PUT` / `DELETE /api/bots/:id`; `POST /api/bots/:id/pause|resume|stop`.
 - `GET /api/bots/:botId/peers/:peerId/messages`: full Bot-to-Bot history.
 - `POST /api/messages` (optional `attachments`), `POST /api/reactions`.

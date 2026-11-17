@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ConfigStore } from './core/config';
-import { Store } from './core/store';
+import { Store, type Message } from './core/store';
 import { Scheduler, type SessionFactory } from './agent/scheduler';
 import { readSessionHistory, sanitizeSessionEvent } from './agent/session-view';
 import { createPi } from './agent/pi';
@@ -57,6 +57,14 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
   });
   const json=(body:unknown,status=200)=>Response.json(body,{status});
   const createToken=()=>`${crypto.randomUUID().replace(/-/g,'')}${crypto.randomUUID().replace(/-/g,'')}`;
+  const messageAfterMap=(value:string|null):Record<string,number>|undefined=>{
+    if(!value)return undefined;
+    const parsed=JSON.parse(value) as unknown;
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error('Invalid messageAfter');
+    const result:Record<string,number>={};
+    for(const [key,seq] of Object.entries(parsed)){id(key);if(typeof seq!=='number'||!Number.isSafeInteger(seq)||seq<1)throw new Error('Invalid messageAfter');result[key]=seq;}
+    return result;
+  };
   const advancedMode=()=>config.global().advancedMode===true;
   const requireAdvanced=()=>advancedMode()?null:json({error:'Advanced mode is disabled'},403);
   const formFiles=(form:FormData)=>form.getAll('files').filter((value):value is File => !!value && typeof value==='object' && typeof (value as File).arrayBuffer==='function');
@@ -154,7 +162,18 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         const upgraded=httpServer.upgrade(req,{data:{mode:'terminal',botId:ticket.botId,desktopId:ticket.desktopId,pid:ticket.pid}});
         return upgraded?undefined as unknown as Response:json({error:'WebSocket upgrade failed'},400);
       }
-      if(path==='/api/state') {const c=config.global();return json({bots:config.bots(),connectors:registry.list(),sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,advancedMode:c.advancedMode===true,setupCompleted:c.setupCompleted===true,profile:c.profile??{},statuses:config.bots().map(b=>scheduler.status(b.id)),messages:store.messages(),botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});}
+      if(path==='/api/state') {
+        const c=config.global();const after=messageAfterMap(url.searchParams.get('messageAfter'));const bots=config.bots();const botIds=bots.map(bot=>bot.id);
+        const timeline:Message[]=[];const references:Message[]=[];const cursors:Record<string,number|null>={};
+        for(const bot of bots){
+          if(after&&after[bot.id]!==undefined){const sync=store.messagesAfter(bot.id,after[bot.id]);timeline.push(...sync.messages);references.push(...sync.references);}
+          else {const page=store.messagePage(bot.id);timeline.push(...page.messages);references.push(...page.references);cursors[bot.id]=page.cursor;}
+        }
+        const messages=[...timeline,...store.reactionsForBots(botIds)].sort((a,b)=>a.seq-b.seq);
+        const uniqueReferences=[...new Map(references.map(message=>[message.id,message])).values()];
+        return json({bots,connectors:registry.list(),sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,advancedMode:c.advancedMode===true,setupCompleted:c.setupCompleted===true,profile:c.profile??{},statuses:bots.map(bot=>scheduler.status(bot.id)),messages,messageCursors:cursors,messageReferences:uniqueReferences,botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});
+      }
+      if(path==='/api/messages/search'&&req.method==='GET')return json(store.searchMessages(text(url.searchParams.get('q'),'q')));
       if(path==='/api/events'&&req.method==='POST')return json(submit(await data()),202);
       if(path==='/api/events'&&req.method==='GET')return json(store.replay(Number(url.searchParams.get('after')??0)));
       if(path==='/api/stream') {const after=Number(req.headers.get('last-event-id')??url.searchParams.get('after')??0);if(!Number.isSafeInteger(after)||after<0)throw new Error('Invalid SSE cursor');const encoder=new TextEncoder();let cleanup=()=>{};const stream=new ReadableStream<Uint8Array>({start(controller){let cursor=after;const send=(e:DuduEvent)=>{if(e.seq<=cursor)return;cursor=e.seq;controller.enqueue(encoder.encode(`id: ${e.seq}\nevent: update\ndata: ${JSON.stringify(e)}\n\n`));};let page:DuduEvent[];do{page=store.replay(cursor);for(const e of page)send(e);}while(page.length===500);const listener=(e:DuduEvent)=>send(e);store.listeners.add(listener);const timer=setInterval(()=>controller.enqueue(encoder.encode(': heartbeat\n\n')),15000);cleanup=()=>{clearInterval(timer);store.listeners.delete(listener);};req.signal.addEventListener('abort',()=>{cleanup();try{controller.close();}catch{}},{once:true});},cancel(){cleanup();}});return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-cache','connection':'keep-alive'}});}
@@ -166,6 +185,7 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         if(parts.length===3&&req.method==='DELETE'){void computer.call(botId,'stop').catch(()=>{});await scheduler.cancel(botId);scheduler.slots.delete(botId);config.removeBot(botId);store.deleteBotData(botId);publishDigest('bot.deleted',{botId,name:bot.name},botId);return json({removed:true});}
         if(parts.length===3&&req.method==='PUT'){const input=await data();const next=config.saveBot({...bot,...input,id:botId});publishDigest('bot.updated',{botId,name:next.name});scheduler.invalidate(botId);return json(next);}
         if(parts[3]==='pause'||parts[3]==='resume'||parts[3]==='stop') {if(req.method!=='POST')return json({error:'Method not allowed'},405);const action=parts[3];if(action==='stop'||action==='pause'){config.saveBot({...bot,paused:true});await scheduler.cancel(botId);}else {config.saveBot({...bot,paused:false});if(action==='resume')scheduler.notify(botId);}systemEvent('bot.state.changed',{action,paused:action!=='resume'},botId);return json(scheduler.status(botId));}
+        if(parts.length===4&&parts[3]==='messages'&&req.method==='GET'){const before=Number(url.searchParams.get('before')??Number.MAX_SAFE_INTEGER);if(!Number.isSafeInteger(before)||before<1)throw new Error('Invalid message cursor');return json(store.messagePage(botId,before));}
         if(parts[3]==='peers'&&parts[4]&&parts[5]==='messages') {const peerId=id(parts[4]);config.bot(peerId);return json(store.botHistory(botId,peerId));}
         if(parts[3]==='uploads'&&req.method==='POST'){const files=formFiles(await req.formData());if(!files.length)throw new Error('No files');return json({files:await uploadWorkspaceFiles(config,botId,'work/uploads',files,{ensureDir:true})},201);}
         if(parts[3]==='files'&&parts[4]==='mkdir'&&req.method==='POST'){const denied=requireAdvanced();if(denied)return denied;const v=await data();return json(await mkdirWorkspace(config,botId,String(v.path??'')),201);}

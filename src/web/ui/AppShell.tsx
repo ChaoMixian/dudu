@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Alert, AlertDialog, Button, Dropdown, Input, Modal, Spinner, TextField, Tooltip } from '@heroui/react';
+import type { Message } from '../lib/types';
 import type { BotConfig } from '../../contracts';
 import { request, segment } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
@@ -62,13 +63,24 @@ export default function AppShell() {
   const displayName = profile.name?.trim() || t('profile.defaultName');
   const profileInitial = Array.from(displayName)[0]?.toUpperCase() ?? '?';
   const normalizedQuery = query.trim().toLocaleLowerCase();
+  const [searchMessages, setSearchMessages] = useState<Message[]>([]);
+  useEffect(() => {
+    setSearchMessages([]);
+    if (!normalizedQuery) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void request<Message[]>(token, `/messages/search?q=${encodeURIComponent(normalizedQuery)}`, 'GET', undefined, controller.signal)
+        .then(setSearchMessages).catch(() => {});
+    }, 200);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [normalizedQuery, token]);
 
   const lastMessage = (botId: string, matchQuery = false) => {
     const messages = state.messages
       .filter(message => message.botId === botId && message.conversationId === 'default' && message.kind !== 'reaction')
       .sort((a, b) => a.seq - b.seq);
     if (!matchQuery || !normalizedQuery) return messages.at(-1);
-    return [...messages].reverse().find(message => message.text.toLocaleLowerCase().includes(normalizedQuery)) ?? messages.at(-1);
+    return searchMessages.find(message => message.botId === botId) ?? [...messages].reverse().find(message => message.text.toLocaleLowerCase().includes(normalizedQuery)) ?? messages.at(-1);
   };
   const bots = state.bots.filter(bot => !normalizedQuery
     || `${bot.name} ${bot.description ?? ''} ${bot.id} ${lastMessage(bot.id, true)?.text ?? ''}`.toLocaleLowerCase().includes(normalizedQuery));
@@ -227,11 +239,16 @@ export default function AppShell() {
   );
 
   const botRow = (bot: typeof bots[number]) => {
-    const message = lastMessage(bot.id, Boolean(normalizedQuery));
+    const searchMatch = normalizedQuery ? searchMessages.find(message => message.botId === bot.id) : undefined;
+    const localMatch = normalizedQuery ? [...state.messages].reverse().find(message => message.botId === bot.id
+      && message.conversationId === 'default' && message.kind !== 'reaction'
+      && message.text.toLocaleLowerCase().includes(normalizedQuery)) : undefined;
+    const message = searchMatch ?? localMatch ?? lastMessage(bot.id);
     const preview = (message?.text || message?.attachments?.map(attachment => attachment.name).join(', ')) ?? bot.description ?? t('ui.startChat', { name: bot.name });
+    const matchedSeq = searchMatch?.seq ?? localMatch?.seq;
     return (
       <div className="bot-row-wrap" key={bot.id}>
-        <button type="button" className="bot-row" data-active={activeBot === bot.id ? 'true' : undefined} onClick={() => navigate(`/bots/${bot.id}`)} aria-current={activeBot === bot.id ? 'page' : undefined}>
+        <button type="button" className="bot-row" data-active={activeBot === bot.id ? 'true' : undefined} onClick={() => navigate(`/bots/${bot.id}${matchedSeq ? `?message=${matchedSeq}` : ''}`)} aria-current={activeBot === bot.id ? 'page' : undefined}>
           <BotAvatar name={bot.name} avatar={bot.avatar} color={bot.color} />
           <span className="bot-row-copy">
             <span className="bot-row-name">{bot.name}</span>

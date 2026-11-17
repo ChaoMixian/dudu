@@ -98,7 +98,8 @@ message_send route={kind:'bot'}
 ## HTTP API
 
 - `GET /api/auth/status`，`POST /api/auth/login`。
-- `GET /api/state`：配置、Bot、消息、Bot 线程、连接器、事件源、状态。
+- `GET /api/state`：配置、Bot、每个 Bot 最近 50 条消息及回应、引用原文、历史游标、Bot 线程和状态；`messageAfter` 是 Bot ID 到已加载最新 seq 的 JSON 映射，用于只拉取新消息。
+- `GET /api/bots/:botId/messages?before=seq`：向前分页，每页 50 条，返回 `messages`、`references` 和 `cursor`（无更多历史时为 `null`）。`GET /api/messages/search?q=关键词` 搜索完整历史，返回每个 Bot 最近一条匹配。
 - `POST /api/bots`，`PUT/DELETE /api/bots/:id`，`POST /api/bots/:id/pause|resume|stop`。
 - `GET /api/bots/:botId/peers/:peerId/messages`：Bot 间完整往来。
 - `POST /api/messages`（可带 `attachments`），`POST /api/reactions`。
