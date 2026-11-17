@@ -90,7 +90,7 @@ message_send route={kind:'bot'}
 
 - `advancedMode` 是全局设置，默认关闭，写入 `config.json`。文件浏览、终端和 Session 流在服务端也检查该值。
 - 右侧面板由 `BotPage` 持有，全高、独立于对话区；以浏览器式标签页打开文件 / 终端 / Session / 电脑，标签栏左侧的菜单支持搜索、切换和关闭，标签溢出时边缘渐隐。面板内容与标签会按 Bot 保存到本地：关闭浏览器窗口后重新打开，面板仍会恢复并以原来的终端重新连接。关闭面板本身只断开终端 WebSocket，不终止 PTY；只有显式关闭终端标签才会结束终端进程。面板左边缘可拖动调宽，拖窄会关闭面板；左侧侧边栏同样可拖动，拖窄后收成 rail。宽度都保存在本地。
-- 文件 API 只允许 Bot 工作区的 `work/`、`artifacts/`、`AGENTS.md`、`MEMORY.md`；拒绝绝对路径、`..` 和符号链接。上传限制 8 个文件 / 50 MiB。
+- 文件 API 只允许 Bot 工作区的 `work/`、`artifacts/`、`BOTS.md`、`MEMORY.md`；拒绝绝对路径、`..` 和符号链接。上传限制 8 个文件 / 50 MiB。
 - 终端是 supervisor 的 PTY（`script`），cwd 为 `work/`；浏览器通过短时 ticket WebSocket 连接，终端记录带 desktopId，桌面停止时一并关闭。终端按 tab 保存 pid；重新打开面板或浏览器时附带 pid 重新连接并回放最近的输出缓冲。PTY 窗口尺寸通过 `stty` 跟随面板宽度调整，初始尺寸也由真实 PTY 设置。
 - Session 通过 scheduler 的只读 observer + SSE；历史按 256 KiB 字节窗口分页，向上滚动时继续加载更早的记录，事件按大小裁剪、base64 图片摘要化。观察者不会创建或提示 session。
 - 高级模式是界面收敛，不是安全边界；同 UID 的桌面本来就能访问宿主机。

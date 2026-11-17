@@ -34,6 +34,8 @@ export class ConfigStore {
         saveJson(this.globalPath,{...current,setupCompleted:configured});
       }
     }
+    // Refresh generated BOTS.md for existing Bots on load so identity changes reach them.
+    for(const bot of this.bots()) ensureBotFiles(this.botPath(bot.id),bot);
   }
   get globalPath() { return join(this.root,'.dudu/config.json'); }
   global(): GlobalConfig { return JSON.parse(readFileSync(this.globalPath,'utf8')); }

@@ -64,7 +64,7 @@ PATH="$HOME/.cargo/bin:$PATH" bun run start
 ├── connectors/<id>/connector.json
 └── bots/<botId>/
     ├── bot.json
-    ├── AGENTS.md
+    ├── BOTS.md
     ├── MEMORY.md
     ├── work/                  # Bot 的工作目录
     ├── home/                  # Bot 的私有目录
@@ -166,7 +166,7 @@ Bot 间通信的保护：
 
 在 **设置 → 高级** 开启后，Bot 页面右侧会出现独立的全高工具面板；文件 / 终端 / Session / 电脑以浏览器式标签页打开，起始页用于选择工具，左边缘可拖动调宽，拖窄到一定程度会关闭面板但保留标签页。标签栏左侧的按钮可以搜索、切换和关闭标签页；标签溢出时边缘渐隐。左侧侧边栏也可拖动，拖窄后收成图标栏。关闭时这些入口和面板完全隐藏，输入框的上传、拖拽和粘贴附件仍然可用。
 
-- **文件**：只开放 Bot 工作区的 `work/`、`artifacts/`、`AGENTS.md`、`MEMORY.md`；拒绝绝对路径、`..` 和符号链接。单次最多 8 个文件、每个 50 MiB。
+- **文件**：只开放 Bot 工作区的 `work/`、`artifacts/`、`BOTS.md`、`MEMORY.md`；拒绝绝对路径、`..` 和符号链接。单次最多 8 个文件、每个 50 MiB。
 - **终端**：在 Bot 桌面环境的 PTY 中运行 bash（不可用时回退到 `/bin/sh`），默认 cwd 为 `work/`。关闭面板或切换 Bot 只断开连接，PTY 继续运行；重新打开会接回原终端。关闭终端标签或停止桌面才会结束。PTY 尺寸跟随面板宽度调整。
 - **Session**：按 256 KiB 窗口读取 `.pi/session.jsonl`，向上滚动加载更早记录，并通过 SSE 推送实时事件；工具结果和 base64 图片会被裁剪或摘要化。
 - **电脑**：直接查看和操作当前 Bot 的桌面。

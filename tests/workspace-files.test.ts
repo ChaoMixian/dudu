@@ -31,7 +31,7 @@ test('advanced mode gates workspace files while composer uploads stay available'
     expect(((await (await call('/api/state')).json()) as { advancedMode: boolean }).advancedMode).toBe(true);
 
     const listing = await (await call('/api/bots/a/files?path=')).json() as { entries: { name: string; type: string }[] };
-    expect(listing.entries.map(entry => entry.name)).toEqual(expect.arrayContaining(['work', 'artifacts', 'AGENTS.md', 'MEMORY.md']));
+    expect(listing.entries.map(entry => entry.name)).toEqual(expect.arrayContaining(['work', 'artifacts', 'BOTS.md', 'MEMORY.md']));
     expect(listing.entries.every(entry => entry.type === 'dir' || entry.type === 'file')).toBe(true);
 
     const form = new FormData();

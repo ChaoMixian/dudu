@@ -169,7 +169,7 @@ export const zh = {
     model: '模型', chooseModel: '选择模型', configureModel: '配置模型', followDefault: '跟随默认',
     formDesc: '给 Bot 一个身份和简单的工作说明。',
     id: 'Bot ID', idHelp: '创建后不可修改；用于目录、事件路由与 CLI。', name: '名称', description: '描述 / 指令',
-    descriptionHelp: '写入 Bot 的 AGENTS.md，作为持久身份的一部分。', provider: 'Provider ID', providerHelp: '必须是已配置的模型服务。',
+    descriptionHelp: '写入 Bot 的 BOTS.md，作为持久身份的一部分。', provider: 'Provider ID', providerHelp: '必须是已配置的模型服务。',
     thinking: '思考强度', create: '创建', save: '保存配置',
     idRule: 'Bot ID 需为 1–64 位字母、数字、下划线或连字符，并以字母或数字开头。',
     emptyChat: '还没有消息。发送第一条消息唤醒 {name}。',

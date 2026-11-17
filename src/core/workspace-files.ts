@@ -7,7 +7,7 @@ import { mimeFor } from './attachments';
 const MAX_UPLOAD = 50 * 1024 * 1024;
 const MAX_LIST = 500;
 const DIR_ROOTS = new Set(['work', 'artifacts']);
-const FILE_ROOTS = new Set(['AGENTS.md', 'MEMORY.md']);
+const FILE_ROOTS = new Set(['BOTS.md', 'MEMORY.md']);
 
 /** Paths the web file manager may see; everything else stays private. */
 function cleanRelative(value: unknown): string {
@@ -70,7 +70,7 @@ export async function listWorkspace(config: ConfigStore, botId: string, value: u
   const { root, rel, target } = await resolveEntry(config, botId, value);
   if (rel === '') {
     const entries: WorkspaceEntry[] = [];
-    for (const name of ['work', 'artifacts', 'AGENTS.md', 'MEMORY.md']) {
+    for (const name of ['work', 'artifacts', 'BOTS.md', 'MEMORY.md']) {
       const info = await lstat(join(root, name)).catch(() => null);
       if (info) entries.push(entryOf(name, name, info));
     }

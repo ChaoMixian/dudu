@@ -64,7 +64,7 @@ Workspace files are the source of truth:
 ├── connectors/<id>/connector.json
 └── bots/<botId>/
     ├── bot.json
-    ├── AGENTS.md
+    ├── BOTS.md
     ├── MEMORY.md
     ├── work/                  # Bot working directory
     ├── home/                  # Bot private directory
@@ -166,7 +166,7 @@ Bot desktops need no service URL. Each Bot gets its own desktop:
 
 Enable it in **Settings → Advanced** to show an independent full-height tool panel beside the Bot conversation. Files / Terminal / Session / Computer open as browser-like tabs, the start page chooses a tool, and the left edge resizes the panel; dragging it narrow closes the panel but keeps the tabs. The button at the left of the tab bar searches, switches, and closes tabs, and overflowing tabs fade at the edge. The left sidebar can also be dragged narrow to collapse into the icon rail. When off, these entries and the panel are hidden; composer upload, drag-and-drop, and paste remain available.
 
-- **Files**: only the Bot workspace `work/`, `artifacts/`, `AGENTS.md`, and `MEMORY.md` are exposed. Absolute paths, `..`, and symlinks are rejected. Up to 8 files per upload, 50 MiB each.
+- **Files**: only the Bot workspace `work/`, `artifacts/`, `BOTS.md`, and `MEMORY.md` are exposed. Absolute paths, `..`, and symlinks are rejected. Up to 8 files per upload, 50 MiB each.
 - **Terminal**: runs bash in a PTY inside the Bot desktop environment (falling back to `/bin/sh` when bash is absent), with cwd `work/`. Closing the panel or switching Bots only drops the connection; the PTY keeps running and reconnects when reopened. Closing the terminal tab or stopping the desktop ends it. The PTY size follows the panel width.
 - **Session**: reads `.pi/session.jsonl` in 256 KiB windows, loads older entries on upward scroll, and streams live events over SSE. Tool output and base64 images are bounded or summarized.
 - **Computer**: view and operate the current Bot desktop directly.

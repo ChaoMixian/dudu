@@ -171,7 +171,7 @@ export const en: Dictionary = {
     notFoundTitle: 'Bot not found', notFoundBody: 'It may have been removed.', back: 'Back', newTitle: 'Create bot', editTitle: 'Configure {name}',
     formDesc: 'Identity, model and workspace connectors.',
     id: 'Bot ID', idHelp: 'Immutable after creation; used for directories, routing and CLI.', name: 'Name', description: 'Description / instructions',
-    descriptionHelp: 'Written into the bot AGENTS.md as part of its persistent identity.', provider: 'Provider ID', providerHelp: 'Must be a configured model provider.',
+    descriptionHelp: 'Written into the bot BOTS.md as part of its persistent identity.', provider: 'Provider ID', providerHelp: 'Must be a configured model provider.',
     thinking: 'Thinking level', create: 'Create', save: 'Save',
     idRule: 'Bot ID: 1–64 letters, digits, _ or -, starting with a letter or digit.',
     emptyChat: 'No messages yet. Send the first one to wake {name}.',
