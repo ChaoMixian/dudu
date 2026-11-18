@@ -761,6 +761,14 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
         </div>
       </div>
 
+      <div
+        className="composer-dock"
+        onPointerDown={event => {
+          if (event.target !== event.currentTarget) return;
+          event.preventDefault();
+          composerRef.current?.focus();
+        }}
+      >
       <div className="chat-composer relative mx-auto w-full max-w-4xl shrink-0 px-4 md:px-8" aria-busy={sending}>
         {showJump && <div className="absolute inset-x-0 bottom-full flex justify-center pb-3">
           <Tooltip>
@@ -873,6 +881,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
           </div>
         </div>
         <p id="chat-send-hint" className="sr-only">{t('message.composer', { name: bot.name })}</p>
+      </div>
       </div>
 
       {menu && createPortal(

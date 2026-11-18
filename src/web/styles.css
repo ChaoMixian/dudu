@@ -1762,6 +1762,11 @@ button.message-reaction:focus-visible {
   color: var(--foreground);
 }
 
+.composer-dock {
+  flex-shrink: 0;
+  background: var(--background);
+}
+
 .chat-composer {
   padding-bottom: 20px;
 }
@@ -2672,8 +2677,12 @@ html {
 }
 
 @media (display-mode: standalone) {
+  .composer-dock {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
   .chat-composer {
-    padding-bottom: 0;
+    padding-bottom: 16px;
   }
 
   .modal__container,

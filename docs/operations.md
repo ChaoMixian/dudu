@@ -190,6 +190,7 @@ git push origin v0.1.0
 ## 远程访问
 
 - 推荐通过 HTTPS 反向代理访问 dudu；如果使用 frp，请同时转发 HTTP 和 WebSocket，并保持同一源
+- iOS 主屏幕和 Service Worker 需要 HTTPS（或设备本机 localhost）；HTTP + 局域网 IP 只能作为普通网页快捷方式，图标、standalone 和安全区行为不可靠
 - 电脑流已经走 dudu 同一端口，不需要额外开放 voxl 端口
 - 自签证书需要浏览器信任，否则部分浏览器能力（如 WebCodecs）可能不可用
 

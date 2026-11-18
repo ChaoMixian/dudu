@@ -190,6 +190,7 @@ git push origin v0.1.0
 ## Remote access
 
 - Prefer an HTTPS reverse proxy for dudu. If using frp, forward both HTTP and WebSocket and keep them same-origin
+- iOS home-screen apps and Service Workers require HTTPS (or localhost on the device); plain HTTP over a LAN IP only works as a basic web clip, with unreliable icons, standalone behavior, and safe areas
 - The computer stream already uses dudu's own port; no extra voxl port needs to be exposed
 - Self-signed certificates must be trusted by the browser; otherwise some capabilities (such as WebCodecs) may not work
 
