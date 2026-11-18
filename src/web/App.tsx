@@ -9,6 +9,7 @@ import BotPage from './pages/BotPage';
 import SettingsPage from './pages/SettingsPage';
 import AutomationsPage from './pages/AutomationsPage';
 import { useI18n } from './i18n';
+import { useKeyboardViewport } from './lib/viewport';
 import Icon from './ui/Icon';
 import BotAvatar from './ui/BotAvatar';
 import BrandMark from './ui/BrandMark';
@@ -102,6 +103,7 @@ function ShellRoute() {
 }
 
 export default function App() {
+  useKeyboardViewport();
   return (
     <Routes>
       <Route element={<Guard />}>

@@ -1,6 +1,6 @@
 {
   "name": "dudu",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Local-first Bot workbench with persistent identities, memory, and per-Bot Linux desktops.",
   "private": true,
   "packageManager": "bun@1.4.4",
