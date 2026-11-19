@@ -19,8 +19,14 @@ function headers(token: string, json = false): Headers {
 
 async function checked(response: Response): Promise<Response> {
   if (!response.ok) {
-    const detail = (await response.text()).slice(0, 500);
-    throw new ApiError(response.status, `HTTP ${response.status}: ${detail || response.statusText}`);
+    const raw = (await response.text()).slice(0, 2000);
+    let detail = raw;
+    try {
+      const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown };
+      if (typeof parsed.error === 'string' && parsed.error) detail = parsed.error;
+      else if (typeof parsed.message === 'string' && parsed.message) detail = parsed.message;
+    } catch { /* keep the raw response */ }
+    throw new ApiError(response.status, detail || `HTTP ${response.status} ${response.statusText}`.trim());
   }
   return response;
 }

@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Info, Plug, Server, SlidersHorizontal, Sun, UserRound } from 'lucide-react';
+import { BookOpen, Info, Monitor, Plug, Server, SlidersHorizontal, Sun, UserRound } from 'lucide-react';
 import { useI18n } from '../i18n';
 import useUnsavedChanges from '../ui/useUnsavedChanges';
 import AboutPage from './AboutPage';
 import AdvancedPage from './AdvancedPage';
 import AppearancePage from './AppearancePage';
+import ComputersPage from './ComputersPage';
 import ConnectorsPage from './ConnectorsPage';
 import ProfilePage from './ProfilePage';
 import ProvidersPage from './ProvidersPage';
+import SkillsPage from './SkillsPage';
 
 export default function SettingsPage() {
   const { tab = 'profile' } = useParams();
-  if (!['profile', 'providers', 'connectors', 'appearance', 'advanced', 'about'].includes(tab)) return <Navigate to="/settings/profile" replace />;
+  if (!['profile', 'providers', 'connectors', 'computers', 'skills', 'appearance', 'advanced', 'about'].includes(tab)) return <Navigate to="/settings/profile" replace />;
   return <SettingsContent key={tab} tab={tab} />;
 }
 
@@ -39,6 +41,12 @@ function SettingsContent({ tab }: { tab: string }) {
               <button type="button" className="settings-link" data-active={tab === 'connectors' ? 'true' : undefined} aria-current={tab === 'connectors' ? 'page' : undefined} onClick={() => go('connectors')} disabled={pending}>
                 <Plug size={17} aria-hidden="true" /><span>{t('nav.connectors')}</span>
               </button>
+              <button type="button" className="settings-link" data-active={tab === 'computers' ? 'true' : undefined} aria-current={tab === 'computers' ? 'page' : undefined} onClick={() => go('computers')} disabled={pending}>
+                <Monitor size={17} aria-hidden="true" /><span>{t('nav.computers')}</span>
+              </button>
+              <button type="button" className="settings-link" data-active={tab === 'skills' ? 'true' : undefined} aria-current={tab === 'skills' ? 'page' : undefined} onClick={() => go('skills')} disabled={pending}>
+                <BookOpen size={17} aria-hidden="true" /><span>{t('nav.skills')}</span>
+              </button>
               <button type="button" className="settings-link" data-active={tab === 'appearance' ? 'true' : undefined} aria-current={tab === 'appearance' ? 'page' : undefined} onClick={() => go('appearance')} disabled={pending}>
                 <Sun size={17} aria-hidden="true" /><span>{t('appearance.title')}</span>
               </button>
@@ -54,6 +62,8 @@ function SettingsContent({ tab }: { tab: string }) {
             {tab === 'profile' && <ProfilePage onDirtyChange={setDirty} onPendingChange={setPending} />}
             {tab === 'providers' && <ProvidersPage onDirtyChange={setDirty} onPendingChange={setPending} />}
             {tab === 'connectors' && <ConnectorsPage onDirtyChange={setDirty} onPendingChange={setPending} />}
+            {tab === 'computers' && <ComputersPage />}
+            {tab === 'skills' && <SkillsPage onPendingChange={setPending} />}
             {tab === 'appearance' && <AppearancePage />}
             {tab === 'advanced' && <AdvancedPage />}
             {tab === 'about' && <AboutPage />}

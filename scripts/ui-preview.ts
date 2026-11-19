@@ -68,6 +68,21 @@ const encoder = new TextEncoder();
 const requests: { method: string; path: string; body: unknown }[] = [];
 const publish = () => { for (const stream of streams) { try { stream.enqueue(encoder.encode(`data: ${JSON.stringify({ updated: true })}\n\n`)); } catch { streams.delete(stream); } } };
 const dist = resolve(import.meta.dir, '../dist');
+const previewCatalog = [
+  { id: 'bark', name: 'Bark', description: '发送 Bark / iOS 推送。', category: 'notify', fields: [{ key: 'pushUrl', label: '推送地址', type: 'password', required: true, placeholder: 'https://api.day.app/your-key' }], tools: [] },
+  { id: 'weather', name: '天气', description: '查询天气、预报和空气质量。', category: 'utility', fields: [{ key: 'city', label: '城市', type: 'text', required: true, placeholder: '例如：杭州' }], tools: [] },
+  { id: 'caldav', name: 'CalDAV', description: '读写 iCloud 或标准 CalDAV 日历。', category: 'calendar', fields: [{ key: 'preset', label: '服务商', type: 'select', defaultValue: 'icloud', options: [{ value: 'icloud', label: 'iCloud' }, { value: 'custom', label: '自定义 CalDAV' }] }, { key: 'serverUrl', label: '服务器地址', type: 'url', visibleWhen: { key: 'preset', equals: 'custom' } }, { key: 'username', label: '用户名', type: 'text', required: true }, { key: 'password', label: 'App 专用密码', type: 'password', required: true }], tools: [] },
+  { id: 'outlook', name: 'Outlook Calendar', description: '读写 Outlook / Microsoft 365 日历。', category: 'calendar', connect: { kind: 'device-code', credentials: ['refreshToken'] }, fields: [], tools: [] },
+  { id: 'weixin', name: '微信', description: '接入个人微信，收发消息。', category: 'message', connect: { kind: 'qr', credentials: ['token'] }, fields: [{ key: 'botId', label: '绑定 Bot', type: 'bot', required: true }], tools: [] },
+];
+const previewPopular = [
+  { id: 'vercel-labs/skills/find-skills', name: 'find-skills', source: 'vercel-labs/skills', skillId: 'find-skills', installs: 4413641 },
+  { id: 'mattpocock/skills/grill-me', name: 'grill-me', source: 'mattpocock/skills', skillId: 'grill-me', installs: 1568415 },
+  { id: 'vercel-labs/agent-browser/agent-browser', name: 'agent-browser', source: 'vercel-labs/agent-browser', skillId: 'agent-browser', installs: 1503442 },
+  { id: 'designed-by-ai/skills/design-mobile-apps', name: 'design-mobile-apps', source: 'designed-by-ai/skills', skillId: 'design-mobile-apps', installs: 1483875 },
+  { id: 'flowkit-labs/skills/reddit-automation', name: 'reddit-automation', source: 'flowkit-labs/skills', skillId: 'reddit-automation', installs: 1431227 },
+  { id: 'mattpocock/skills/tdd', name: 'tdd', source: 'mattpocock/skills', skillId: 'tdd', installs: 1252860 },
+];
 const desktop = { id: 'workspace-desktop', botId: 'assistant', state: 'stopped', width: 1280, height: 800 };
 const server = Bun.serve({
   hostname: '127.0.0.1', port: Number(process.env.UI_PREVIEW_PORT ?? 7441), idleTimeout: 0,
@@ -81,17 +96,45 @@ const server = Bun.serve({
       let current: ReadableStreamDefaultController<Uint8Array>;
       return new Response(new ReadableStream({ start(controller) { current = controller; streams.add(controller); controller.enqueue(encoder.encode(': ready\n\n')); }, cancel() { streams.delete(current); } }), { headers: { 'content-type': 'text/event-stream' } });
     }
+    if (/^\/api\/connectors\/[^/]+\/disconnect$/.test(path) && req.method === 'POST') {
+      const connector = state.connectors.find(item => item.id === decodeURIComponent(path.split('/')[3]!));
+      if (connector) { connector.credentialsSet = []; connector.runtime = { state: 'stopped' }; publish(); }
+      return Response.json({ ok: true });
+    }
+    if (/^\/api\/connectors\/[^/]+\/weixin\/login\/start$/.test(path) && req.method === 'POST') return Response.json({ sessionKey: 'preview-login', qrUrl: 'https://example.com/weixin-preview' });
+    if (/^\/api\/connectors\/[^/]+\/weixin\/login\/poll$/.test(path) && req.method === 'POST') return Response.json({ state: 'wait', message: en ? 'Waiting for scan…' : '等待扫码…' });
+    if (/^\/api\/connectors\/[^/]+\/outlook\/device\/start$/.test(path) && req.method === 'POST') return Response.json({ deviceCode: 'preview-device', userCode: 'ABC123', verificationUri: 'https://microsoft.com/devicelogin', interval: 5 });
+    if (/^\/api\/connectors\/[^/]+\/outlook\/device\/poll$/.test(path) && req.method === 'POST') return Response.json({ status: 'pending', message: en ? 'Waiting for Microsoft sign-in…' : '等待 Microsoft 登录…' });
+    if (path === '/api/weixin/login/start' && req.method === 'POST') return Response.json({ sessionKey: 'preview-login', qrUrl: 'https://example.com/weixin-preview' });
+    if (path === '/api/weixin/login/poll' && req.method === 'POST') return Response.json({ state: 'wait', message: en ? 'Waiting for scan…' : '等待扫码…' });
+    if (path === '/api/outlook/device/start' && req.method === 'POST') return Response.json({ deviceCode: 'preview-device', userCode: 'ABC123', verificationUri: 'https://microsoft.com/devicelogin', interval: 5 });
+    if (path === '/api/outlook/device/poll' && req.method === 'POST') return Response.json({ status: 'pending', message: en ? 'Waiting for Microsoft sign-in…' : '等待 Microsoft 登录…' });
     if (path.startsWith('/api/')) {
       let body: any;
       try { body = req.method === 'POST' || req.method === 'PUT' ? await req.json() : undefined; }
       catch { return Response.json({ error: 'Expected a JSON body' }, { status: 400 }); }
       requests.push({ method: req.method, path, body });
+      if (path === '/api/connectors/catalog') return Response.json({ providers: previewCatalog });
+      if (path === '/api/skills') return Response.json({ skills: [] });
+      if (path === '/api/skills/popular') return Response.json({ skills: previewPopular });
+      if (path === '/api/skills/describe') return Response.json({ descriptions: {} });
+      if (path === '/api/skills/search') return Response.json({ skills: [] });
+      if (path.startsWith('/api/connectors/') && req.method === 'DELETE') {
+        const id = path.split('/')[3];
+        state.connectors = state.connectors.filter(connector => connector.id !== id);
+        publish(); return Response.json({ removed: true });
+      }
       if (path === '/api/messages' && req.method === 'POST') {
         if (body.text === 'simulate-error') return Response.json({ error: 'Preview: simulated send failure' }, { status: 503 });
         const seq = Math.max(...state.messages.map(message => message.seq)) + 1;
         state.messages.push({ id: `preview-${seq}`, botId: body.botId, conversationId: 'default', sender: 'user', kind: 'message', text: body.text, createdAt: new Date().toISOString(), seq, status: 'sent' });
         publish(); return Response.json({ accepted: true }, { status: 202 });
       }
+      if (path === '/api/computer/doctor') return Response.json({
+        doctor: { dependencies: Object.fromEntries(['Xvfb', 'xfce4-session', 'xfwm4', 'xfce4-panel', 'xfdesktop', 'xauth', 'xdpyinfo', 'xprop', 'xdotool', 'xclip', 'ffmpeg', 'dbus-daemon'].map(key => [key, `/usr/bin/${key}`]).concat([['voxl', null]])) },
+        desktops: [desktop],
+        bots: bots.map(bot => ({ id: bot.id, name: bot.name })),
+      });
       if (path.includes('/computer/')) {
         const action = path.split('/').at(-1);
         if (action === 'start') desktop.state = 'ready';
@@ -105,7 +148,7 @@ const server = Bun.serve({
       if (peers) return Response.json(thread);
       if (path === '/api/providers') state.providers = body.providers;
       if (path === '/api/defaults') state.defaults = body;
-      else if (path === '/api/connectors') state.connectors = [...state.connectors.filter(connector => connector.id !== body.id), body];
+      else if (path === '/api/connectors') { const previous = state.connectors.find(connector => connector.id === body.id); state.connectors = [...state.connectors.filter(connector => connector.id !== body.id), previous ? { ...previous, ...body, runtime: body.runtime ?? previous.runtime, credentialsSet: body.credentialsSet ?? previous.credentialsSet } : body]; }
       else if (path === '/api/sources' && req.method === 'POST') state.sources = [...state.sources.filter(source => source.id !== body.id), body];
       else if (path.startsWith('/api/sources/')) {
         const [, , , id, action] = path.split('/');

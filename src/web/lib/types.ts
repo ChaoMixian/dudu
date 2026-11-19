@@ -13,9 +13,11 @@ export interface Message {
   status: MessageStatus; createdAt: string; seq: number;
 }
 export interface MessagePage { messages: Message[]; references: Message[]; cursor: number | null }
+export interface ConnectorRuntime { state?: string; accountId?: string; userId?: string; error?: string; lastMessageAt?: string }
+export interface ConnectorView extends ConnectorDefinition { headers?: Record<string, string>; timeoutMs?: number; credentialsSet?: string[]; runtime?: ConnectorRuntime }
 export interface Defaults { provider?: string; model?: string }
 export interface AppState {
-  bots: BotConfig[]; connectors: ConnectorDefinition[]; sources: SourceConfig[];
+  bots: BotConfig[]; connectors: ConnectorView[]; sources: SourceConfig[];
   providers: ProviderConfig[]; defaults: Defaults; autoStartComputers: boolean; advancedMode: boolean; setupCompleted: boolean;
   profile: UserProfile;
   messageCursors?: Record<string, number | null>; messageReferences?: Message[];

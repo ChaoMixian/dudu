@@ -64,7 +64,7 @@ describe('computer UI requests', () => {
 
   test('request failures remain available for visible UI errors', async () => {
     mockResponse(new Response('desktop unavailable', { status: 503 }));
-    await expect(computerAction('', 'bot', 'stop')).rejects.toThrow('HTTP 503: desktop unavailable');
+    await expect(computerAction('', 'bot', 'stop')).rejects.toThrow('desktop unavailable');
   });
 
   test('already aborted status reads reject without a usable stale result', async () => {

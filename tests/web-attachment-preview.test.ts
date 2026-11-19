@@ -42,7 +42,7 @@ test('binary attachments are not decoded as text', async () => {
 
 test('HTTP failures propagate so retry can issue a fresh request', async () => {
   respond(new Response('Unavailable', { status: 503 }));
-  await expect(loadAttachmentPreview('', attachment, new AbortController().signal)).rejects.toThrow('HTTP 503');
+  await expect(loadAttachmentPreview('', attachment, new AbortController().signal)).rejects.toThrow('Unavailable');
   respond(new Response('recovered'));
   expect((await loadAttachmentPreview('', attachment, new AbortController().signal)).text).toBe('recovered');
 });
