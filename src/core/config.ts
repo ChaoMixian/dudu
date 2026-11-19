@@ -21,7 +21,7 @@ export class ConfigStore {
   root: string;
   constructor(root = workspaceRoot()) {
     this.root=workspaceRoot(root);
-    for(const p of ['bots','connectors','.dudu']) mkdirSync(join(this.root,p),{recursive:true});
+    for(const p of ['bots','connectors','skills','.dudu']) mkdirSync(join(this.root,p),{recursive:true});
     if(!existsSync(this.globalPath)) {
       saveJson(this.globalPath,{host:'127.0.0.1',port:7331,providers:[],autoStartComputers:true,setupCompleted:false});
     } else {

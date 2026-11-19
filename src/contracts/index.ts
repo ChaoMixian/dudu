@@ -16,7 +16,7 @@ export interface ProviderConfig { id: string; name?: string; baseUrl: string; ap
 export interface UserProfile { name?: string; avatar?: string; avatarStyle?: string; avatarPreset?: string }
 export interface GlobalConfig { host: string; port: number; token?: string; passwordHash?: string; providers: ProviderConfig[]; defaultProvider?: string; defaultModel?: string; autoStartComputers?: boolean; advancedMode?: boolean; setupCompleted?: boolean; profile?: UserProfile }
 export interface ConnectorTool { name: string; description: string; parameters: Record<string, unknown> }
-export interface ConnectorDefinition { id: string; name: string; description: string; transport: 'command' | 'mcp' | 'http'; argv?: string[]; url?: string; env?: Record<string,string>; tools: ConnectorTool[] }
+export interface ConnectorDefinition { id: string; name: string; description: string; transport: 'command' | 'mcp' | 'http' | 'builtin'; provider?: string; settings?: Record<string, unknown>; credentials?: Record<string, string>; argv?: string[]; url?: string; env?: Record<string,string>; tools: ConnectorTool[] }
 export interface SourceConfig { id: string; botId: string; kind: 'once' | 'interval' | 'cron' | 'process' | 'webhook'; enabled: boolean; priority: Priority; payload: unknown; at?: string; intervalMs?: number; cron?: string; argv?: string[]; env?: Record<string, string>; type?: string; timezone?: string }
 export interface DesktopConfig { id: string; botId: string; width: number; height: number }
 export interface DesktopStatus extends DesktopConfig { state: 'stopped' | 'starting' | 'ready' | 'error'; display?: string; port?: number; error?: string; watchUrl?: string }

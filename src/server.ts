@@ -2,10 +2,14 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ConfigStore } from './core/config';
 import { Store, type Message } from './core/store';
+import { SkillStore } from './core/skills';
 import { Scheduler, type SessionFactory } from './agent/scheduler';
 import { readSessionHistory, sanitizeSessionEvent } from './agent/session-view';
 import { createPi } from './agent/pi';
 import { ConnectorRegistry } from './connectors';
+import { createBuiltinProviders } from './connectors/builtin';
+import { pollOutlookDevice, startOutlookDevice } from './connectors/builtin/outlook';
+import { WeixinService } from './channels/weixin';
 import { SourceManager } from './sources';
 import { Computer } from './core/computer';
 import { saveAttachments } from './core/attachments';
@@ -35,13 +39,17 @@ function generatedBotId(name:string, taken:Set<string>) {
 }
 export interface AppOptions { assets?: Record<string,string>; autoStart?: boolean }
 export function createApp(root?:string, factory?:SessionFactory, options: AppOptions = {}) {
-  const config=new ConfigStore(root);const store=new Store(join(config.root,'.dudu/state.sqlite'));const registry=new ConnectorRegistry(config.root);
+  const config=new ConfigStore(root);const store=new Store(join(config.root,'.dudu/state.sqlite'));const skills=new SkillStore(config.root);
+  let weixinService: WeixinService | undefined;
+  const registry=new ConnectorRegistry(config.root, createBuiltinProviders({ weixin: () => weixinService }));
   // One-time migration: the old built-in computer connector is now a core capability.
   const legacyComputer=join(config.root,'connectors','computer','connector.json');
   if(existsSync(legacyComputer)){try{const legacy=JSON.parse(readFileSync(legacyComputer,'utf8'));if(legacy?.id==='computer'&&legacy?.transport==='local')rmSync(join(config.root,'connectors','computer'),{recursive:true,force:true});}catch{}}
   const computer=new Computer(config,store);
   const submit=(input:any)=>{config.bot(input.botId);if(input.type==='message.web'||String(input.sourceId??'').startsWith('web:'))store.noteHumanMessage(input.botId);return store.publish(eventInput(input));};
-  const sources=new SourceManager(config.root,store.db,submit);const scheduler=new Scheduler(store,config,factory??(botId=>createPi(botId,config,store,registry,sources,computer)));
+  const sources=new SourceManager(config.root,store.db,submit);
+  weixinService=new WeixinService(registry,store,config.root,botId=>config.bots().some(bot=>bot.id===botId));
+  const scheduler=new Scheduler(store,config,factory??(botId=>createPi(botId,config,store,registry,sources,computer,skills.root)));
   // Any wake event, including bare publishes from bot-to-bot sends and agent-submitted events,
   // must wake the scheduler without waiting for a later human interaction. Bot-to-bot events are
   // coalesced in a one-second window so a burst becomes one sequence-ordered idle batch.
@@ -171,7 +179,8 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         }
         const messages=[...timeline,...store.reactionsForBots(botIds)].sort((a,b)=>a.seq-b.seq);
         const uniqueReferences=[...new Map(references.map(message=>[message.id,message])).values()];
-        return json({bots,connectors:registry.list(),sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,advancedMode:c.advancedMode===true,setupCompleted:c.setupCompleted===true,profile:c.profile??{},statuses:bots.map(bot=>scheduler.status(bot.id)),messages,messageCursors:cursors,messageReferences:uniqueReferences,botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});
+        const publicConnectors=registry.listPublic().map(connector=>connector.provider==='weixin'?{...connector,runtime:weixinService?.status(connector.id)}:connector);
+        return json({bots,connectors:publicConnectors,sources:sources.list(),providers:c.providers,defaults:{provider:c.defaultProvider,model:c.defaultModel},autoStartComputers:c.autoStartComputers!==false,advancedMode:c.advancedMode===true,setupCompleted:c.setupCompleted===true,profile:c.profile??{},statuses:bots.map(bot=>scheduler.status(bot.id)),messages,messageCursors:cursors,messageReferences:uniqueReferences,botThreads:store.botThreads(),desktops:await computer.desktops(),seq:store.latestSeq()});
       }
       if(path==='/api/messages/search'&&req.method==='GET')return json(store.searchMessages(text(url.searchParams.get('q'),'q')));
       if(path==='/api/events'&&req.method==='POST')return json(submit(await data()),202);
@@ -182,7 +191,7 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         store.publish({botId:bot.id,sourceId:'dudu',type:'bot.init',replyTo:{kind:'web',id:'default'},payload:{instruction:`You were just created as “${bot.name}”. ${bot.description?`Your description or instructions: ${bot.description}. `:''}Based on this, decide what kind of work you can take on. Call environment action="bots" to see existing Bots. Use reply route {"kind":"web","id":"default"} for message_send; do not use your Bot ID as the conversation ID. Send one short introduction with message_send, and ask what the user wants to do using kind="ask" with 2–4 concise options; the UI adds a free-text answer row automatically.`},delivery:'wake'});
         void computer.call(bot.id,'start').catch(error=>store.publish({botId:bot.id,sourceId:'computer',type:'computer.error',payload:{error:String(error)},delivery:'digest'}));return json(bot,201);}
       if(parts[1]==='bots'&&parts[2]) {const botId=id(parts[2]);const bot=config.bot(botId);
-        if(parts.length===3&&req.method==='DELETE'){void computer.call(botId,'stop').catch(()=>{});await scheduler.cancel(botId);scheduler.slots.delete(botId);config.removeBot(botId);store.deleteBotData(botId);publishDigest('bot.deleted',{botId,name:bot.name},botId);return json({removed:true});}
+        if(parts.length===3&&req.method==='DELETE'){void computer.call(botId,'stop').catch(()=>{});await scheduler.cancel(botId);scheduler.slots.delete(botId);config.removeBot(botId);store.deleteBotData(botId);weixinService?.sync();publishDigest('bot.deleted',{botId,name:bot.name},botId);return json({removed:true});}
         if(parts.length===3&&req.method==='PUT'){const input=await data();const next=config.saveBot({...bot,...input,id:botId});publishDigest('bot.updated',{botId,name:next.name});scheduler.invalidate(botId);return json(next);}
         if(parts[3]==='pause'||parts[3]==='resume'||parts[3]==='stop') {if(req.method!=='POST')return json({error:'Method not allowed'},405);const action=parts[3];if(action==='stop'||action==='pause'){config.saveBot({...bot,paused:true});await scheduler.cancel(botId);}else {config.saveBot({...bot,paused:false});if(action==='resume')scheduler.notify(botId);}systemEvent('bot.state.changed',{action,paused:action!=='resume'},botId);return json(scheduler.status(botId));}
         if(parts.length===4&&parts[3]==='messages'&&req.method==='GET'){const before=Number(url.searchParams.get('before')??Number.MAX_SAFE_INTEGER);if(!Number.isSafeInteger(before)||before<1)throw new Error('Invalid message cursor');return json(store.messagePage(botId,before));}
@@ -261,7 +270,41 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
       }
       if(path==='/api/messages'&&req.method==='POST'){const v=await data();const botId=id(v.botId);config.bot(botId);const conversationId=id(v.conversationId??'default');const content=typeof v.text==='string'?v.text.trim():'';const replyTo=v.replyTo?id(v.replyTo):undefined;if(replyTo){const target=store.messageById(replyTo);if(!target||target.botId!==botId)throw new Error('Unknown reply target');}const inputs=Array.isArray(v.attachments)?v.attachments.map(item=>{const attachment=object(item);return {path:attachment.path,name:attachment.name};}):[];if(!content&&!inputs.length)throw new Error('text or attachments are required');if(inputs.length>8)throw new Error('At most 8 attachments are allowed');const resolved:{relative:string;name:string;mime:string;size:number}[]=[];for(const input of inputs){const file=await workAttachment(config,botId,input.path);resolved.push({...file,name:typeof input.name==='string'&&input.name.trim()?input.name.trim().slice(0,200):file.name});}const attachments=resolved.length?saveAttachments(config,botId,resolved.map(file=>({path:file.relative,name:file.name}))):undefined;const message=store.message(botId,conversationId,'user',content,'accepted',undefined,'message',undefined,undefined,replyTo,attachments);const accepted=submit({botId,sourceId:`web:${conversationId}`,type:'message.web',payload:{text:content,messageId:message.id,replyTo,...(resolved.length?{attachments:resolved.map(file=>({name:file.name,path:file.relative,mime:file.mime,size:file.size}))}:{})},replyTo:{kind:'web',id:conversationId}});return json({message,...accepted,status:'accepted'},202);}
       if(path==='/api/reactions'&&req.method==='POST'){const v=await data();const botId=id(v.botId);config.bot(botId);const messageId=id(v.messageId);const emoji=text(v.emoji,'emoji').slice(0,32);const target=store.messageById(messageId);if(!target||target.botId!==botId||target.kind==='reaction')throw new Error('Unknown reaction target');return json(store.toggleReaction(botId,target.conversationId,messageId,emoji,'user'));}
-      if(path==='/api/connectors'&&req.method==='POST'){const result=registry.register(await data() as any);for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'connectors',connectorId:result.id});publishDigest('connector.changed',{connectorId:result.id,action:'saved'});return json(result,201);}
+      if(path==='/api/outlook/device/start'&&req.method==='POST'){const v=await data();return json(await startOutlookDevice(object(v.settings??{})));}
+      if(path==='/api/outlook/device/poll'&&req.method==='POST'){const v=await data();return json(await pollOutlookDevice(text(v.deviceCode,'deviceCode'),object(v.settings??{})));}
+      if(path==='/api/weixin/login/start'&&req.method==='POST')return json(await weixinService!.loginStart());
+      if(path==='/api/weixin/login/poll'&&req.method==='POST'){const v=await data();const sessionKey=text(v.sessionKey,'sessionKey');const verifyCode=typeof v.verifyCode==='string'&&v.verifyCode.trim()?v.verifyCode.trim():undefined;return json(await weixinService!.loginPoll(undefined,sessionKey,verifyCode));}
+      if(path==='/api/connectors/catalog'&&req.method==='GET')return json({providers:registry.catalog()});
+      if(path==='/api/connectors/test'&&req.method==='POST')return json(await registry.testDraft(await data()));
+      if(path==='/api/connectors'&&req.method==='POST'){
+        const input=await data();
+        const existingId=typeof input.id==='string'&&input.id.trim()?input.id.trim():undefined;
+        if(input.transport==='builtin'&&existingId){
+          let previous:ReturnType<typeof registry.get>|undefined;
+          try{previous=registry.get(existingId);}catch{/* new connector */}
+          if(previous){if(previous.transport!==input.transport||previous.provider!==input.provider)throw new Error('Connector ID already exists with a different type');const incoming=object(input.credentials??{});const credentials:Record<string,string>={...(previous.credentials??{})};for(const [key,value] of Object.entries(incoming))if(typeof value==='string'&&value)credentials[key]=value;input.credentials=credentials;}
+        }
+        const result=existingId?registry.register({...input,id:existingId} as any):registry.create(input as any);weixinService?.sync();for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'connectors',connectorId:result.id});publishDigest('connector.changed',{connectorId:result.id,action:'saved'});return json(result,201);
+      }
+      if(parts[1]==='connectors'&&parts[2]){
+        const connectorId=id(parts[2]);
+        if(parts.length===3&&req.method==='DELETE'){weixinService?.remove(connectorId);registry.remove(connectorId);for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'connectors',connectorId});publishDigest('connector.changed',{connectorId,action:'removed'});return json({removed:true});}
+        if(parts.length===4&&parts[3]==='test'&&req.method==='POST')return json(await registry.test(connectorId));
+        if(parts.length===4&&parts[3]==='disconnect'&&req.method==='POST'){await registry.disconnect(connectorId);weixinService?.sync();for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'connectors',connectorId});publishDigest('connector.changed',{connectorId,action:'disconnected'});return json({ok:true});}
+        if(parts[3]==='status'&&req.method==='GET'){const connector=registry.get(connectorId);if(connector.provider==='weixin')return json(weixinService!.status(connectorId));return json({state:connector.transport==='builtin'?'ready':'ready'});}
+        if(parts[3]==='weixin'&&parts[4]==='login'&&parts[5]==='start'&&req.method==='POST'){const connector=registry.get(connectorId);if(connector.provider!=='weixin')throw new Error('Not a WeChat connector');return json(await weixinService!.loginStart(connectorId));}
+        if(parts[3]==='weixin'&&parts[4]==='login'&&parts[5]==='poll'&&req.method==='POST'){const v=await data();const sessionKey=text(v.sessionKey,'sessionKey');const verifyCode=typeof v.verifyCode==='string'&&v.verifyCode.trim()?v.verifyCode.trim():undefined;return json(await weixinService!.loginPoll(connectorId,sessionKey,verifyCode));}
+        if(parts[3]==='weixin'&&parts[4]==='messages'&&req.method==='GET'){const connector=registry.get(connectorId);if(connector.provider!=='weixin')throw new Error('Not a WeChat connector');return json({messages:weixinService!.messages(connectorId,Number(url.searchParams.get('limit')??50))});}
+        if(parts[3]==='outlook'&&parts[4]==='device'&&parts[5]==='start'&&req.method==='POST'){const connector=registry.get(connectorId);if(connector.provider!=='outlook')throw new Error('Not an Outlook connector');return json(await startOutlookDevice(connector.settings));}
+        if(parts[3]==='outlook'&&parts[4]==='device'&&parts[5]==='poll'&&req.method==='POST'){const connector=registry.get(connectorId);if(connector.provider!=='outlook')throw new Error('Not an Outlook connector');const v=await data();const result=await pollOutlookDevice(text(v.deviceCode,'deviceCode'),connector.settings);if(result.status==='connected'){registry.setCredentials(connectorId,result.credentials);for(const b of config.bots())scheduler.invalidate(b.id);}return json(result);}
+      }
+      if(path==='/api/skills'&&req.method==='GET')return json({skills:skills.list()});
+      if(path==='/api/skills/popular'&&req.method==='GET')return json({skills:await skills.popular()});
+      if(path==='/api/skills/describe'&&req.method==='POST'){const v=await data();if(!Array.isArray(v.ids))throw new Error('ids must be an array');return json({descriptions:await skills.describe(v.ids.slice(0,60).map(String))});}
+      if(path==='/api/skills/search'&&req.method==='GET')return json({skills:await skills.search(url.searchParams.get('q')??'')});
+      if(path==='/api/skills/inspect'&&req.method==='POST'){const v=await data();return json(await skills.inspect(text(v.source,'source')));}
+      if(path==='/api/skills/install'&&req.method==='POST'){const v=await data();const result=await skills.install(text(v.source,'source'),typeof v.skillId==='string'?v.skillId:undefined);for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'skills',skill:result.slug});publishDigest('skill.changed',{skill:result.slug,action:'installed'});return json(result,201);}
+      if(parts[1]==='skills'&&parts[2]&&req.method==='DELETE'){const slug=decodeURIComponent(parts[2]);skills.remove(slug);for(const b of config.bots())scheduler.invalidate(b.id);systemEvent('config.changed',{section:'skills',skill:slug});publishDigest('skill.changed',{skill:slug,action:'removed'});return json({removed:true});}
       if(path==='/api/sources'&&req.method==='POST'){const v=await data();config.bot(v.botId);return json(sources.register(v as any),201);}
       if(parts[1]==='sources'&&parts[2]) {const sourceId=id(parts[2]);if(req.method==='DELETE')return json({removed:sources.remove(sourceId)});if(req.method==='POST'){if(parts[3]==='trigger')return json(await sources.trigger(sourceId),202);if(['enable','disable'].includes(parts[3]))return json(sources.enable(sourceId,parts[3]==='enable'));}}
       if(path==='/api/defaults'&&req.method==='PUT'){const v=await data();const provider=typeof v.provider==='string'&&v.provider?String(v.provider):undefined;const model=typeof v.model==='string'&&v.model?String(v.model):undefined;
@@ -269,6 +312,7 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
         const previous=config.global();const next={...previous,defaultProvider:provider,defaultModel:provider?model:undefined};config.setGlobal(next);
         for(const b of config.bots())if(!b.model)scheduler.invalidate(b.id);systemEvent('config.changed',{section:'defaults'});publishDigest('config.defaults',{previousProvider:previous.defaultProvider,previousModel:previous.defaultModel,provider:next.defaultProvider,model:next.defaultModel});return json({defaults:{provider:next.defaultProvider,model:next.defaultModel}});}
       if(path==='/api/profile'&&req.method==='PUT'){const v=await data();const name=typeof v.name==='string'?v.name.trim():'';if(name.length>80)throw new Error('Name is too long');const avatar=typeof v.avatar==='string'&&v.avatar? v.avatar: undefined;if(avatar&&avatar.length>2_000_000)throw new Error('Avatar is too large');if(avatar&&!/^data:image\/(?:png|jpe?g|webp|gif|svg\+xml)[;,]/.test(avatar)&&!/^https?:\/\//.test(avatar))throw new Error('Invalid avatar');const avatarStyle=typeof v.avatarStyle==='string'&&/^[a-z0-9-]{1,32}$/.test(v.avatarStyle)?v.avatarStyle:undefined;const avatarPreset=typeof v.avatarPreset==='string'&&/^[a-z0-9-]{1,32}$/.test(v.avatarPreset)?v.avatarPreset:undefined;const profile={...(name?{name}:{}),...(avatar?{avatar}:{}),...(avatarStyle?{avatarStyle}:{}),...(avatarPreset?{avatarPreset}:{})};config.setGlobal({...config.global(),profile});systemEvent('config.changed',{section:'profile'});return json({profile});}
+      if(path==='/api/computer/doctor'&&req.method==='GET')return json({doctor:await computer.supervisor.doctor(),desktops:await computer.desktops(),bots:config.bots().map(bot=>({id:bot.id,name:bot.name}))});
       if(path==='/api/computer-settings'&&req.method==='PUT'){const v=await data();if(typeof v.autoStart!=='boolean')throw new Error('autoStart must be a boolean');config.setGlobal({...config.global(),autoStartComputers:v.autoStart});systemEvent('config.changed',{section:'computer',autoStart:v.autoStart});return json({autoStartComputers:v.autoStart});}
       if(path==='/api/advanced-settings'&&req.method==='PUT'){const v=await data();if(typeof v.advancedMode!=='boolean')throw new Error('advancedMode must be a boolean');config.setGlobal({...config.global(),advancedMode:v.advancedMode});systemEvent('config.changed',{section:'advanced',advancedMode:v.advancedMode});return json({advancedMode:v.advancedMode});}
       if(path==='/api/setup/password'&&req.method==='PUT'){
@@ -303,9 +347,9 @@ export function createApp(root?:string, factory?:SessionFactory, options: AppOpt
   }catch(error){return json({error:error instanceof Error?error.message:String(error)},400);} }
   // Echo the request origin so the LAN-facing dev UI (vite on 0.0.0.0) can call the API from any host address.
   async function fetchRequest(req:Request):Promise<Response> { const origin=req.headers.get('origin');const response=await handle(req);if(!response)return response as unknown as Response;if(origin)response.headers.set('access-control-allow-origin',origin);return response; }
-  sources.start();for(const bot of config.bots())scheduler.notify(bot.id);
+  sources.start();weixinService!.start();for(const bot of config.bots())scheduler.notify(bot.id);
   if(options.autoStart)void computer.startConfigured();
-  return {fetch:fetchRequest,websocket,bindServer(server:any){httpServer=server;},config,store,sources,scheduler,registry,computer,async close(){for(const timer of botWakeTimers.values())clearTimeout(timer);botWakeTimers.clear();await sources.stop();await scheduler.close();await computer.close();store.close();}};
+  return {fetch:fetchRequest,websocket,bindServer(server:any){httpServer=server;},config,store,sources,scheduler,registry,computer,weixin:weixinService,async close(){for(const timer of botWakeTimers.values())clearTimeout(timer);botWakeTimers.clear();await weixinService!.stop();await sources.stop();await scheduler.close();await computer.close();store.close();}};
 }
 export interface StartOptions { workspace?: string; host?: string; port?: number; assets?: Record<string,string> }
 export function startServer(options: StartOptions = {}) {

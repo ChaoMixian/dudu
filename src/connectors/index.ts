@@ -3,9 +3,12 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { join } from 'node:path';
 import type { McpServerConfig } from '@earendil-works/pi-coding-agent';
 import { id, object, text, type ConnectorDefinition } from '../contracts';
+import { catalogEntry, type BuiltinCatalogEntry, type BuiltinProvider, type BuiltinProviderContext } from './types';
 
 export interface CallOptions { signal?: AbortSignal; timeoutMs?: number; maxOutputBytes?: number }
 export type Connector = ConnectorDefinition & { headers?: Record<string, string>; timeoutMs?: number };
+export type PublicConnector = Omit<Connector, 'credentials'> & { credentialsSet?: string[]; runtime?: Record<string, unknown> };
+
 export function stringMap(value: unknown): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, val] of Object.entries(object(value))) { if (typeof val !== 'string') throw new Error(`${key} must be a string`); result[key] = val; }
@@ -21,11 +24,19 @@ export function minimalEnv(extra: Record<string, string> = {}): Record<string, s
   for (const key of ['PATH', 'HOME', 'TMPDIR', 'LANG', 'TZ']) if (process.env[key]) result[key] = process.env[key]!;
   return { ...result, ...extra };
 }
-export function validateConnector(value: unknown): Connector {
+export function validateConnector(value: unknown, providers: ReadonlyMap<string, BuiltinProvider> = new Map()): Connector {
   const v = object(value); id(v.id); text(v.name, 'name');
   if (v.id === 'computer') throw new Error('Connector ID "computer" is reserved for the built-in computer capability');
   if (typeof v.description !== 'string') throw new Error('description must be a string');
-  if (!['command', 'http', 'mcp'].includes(v.transport)) throw new Error('Invalid connector transport');
+  if (!['command', 'http', 'mcp', 'builtin'].includes(v.transport)) throw new Error('Invalid connector transport');
+  if (v.transport === 'builtin') {
+    if (typeof v.provider !== 'string' || !v.provider.trim()) throw new Error('Builtin connector requires provider');
+    const provider = providers.get(v.provider);
+    if (!provider) throw new Error(`Unknown builtin provider: ${v.provider}`);
+    const normalized = provider.normalize(object(v.settings ?? {}), v.credentials === undefined ? {} : stringMap(v.credentials));
+    return structuredClone({ ...v, settings: normalized.settings, credentials: normalized.credentials, tools: provider.tools }) as Connector;
+  }
+  if (v.provider !== undefined || v.settings !== undefined || v.credentials !== undefined) throw new Error('provider/settings/credentials require builtin transport');
   if (v.transport === 'command' || (v.transport === 'mcp' && !v.url)) argv(v.argv);
   if (v.transport === 'http' || v.url !== undefined) { const url = new URL(v.url); if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Expected HTTP URL'); }
   if (v.env !== undefined) stringMap(v.env);
@@ -37,26 +48,110 @@ export function validateConnector(value: unknown): Connector {
   return structuredClone(v) as Connector;
 }
 export class ConnectorRegistry {
-  constructor(readonly root: string) {}
+  private providers = new Map<string, BuiltinProvider>();
+  constructor(readonly root: string, builtins: BuiltinProvider[] = []) {
+    for (const provider of builtins) this.providers.set(provider.id, provider);
+  }
+  provider(providerId: string): BuiltinProvider | undefined { return this.providers.get(providerId); }
+  catalog(): BuiltinCatalogEntry[] { return [...this.providers.values()].map(catalogEntry).sort((a, b) => a.name.localeCompare(b.name)); }
   private path(connectorId: string) { return join(this.root, 'connectors', id(connectorId), 'connector.json'); }
   register(value: ConnectorDefinition): Connector {
-    const connector = validateConnector(value);
+    const connector = validateConnector(value, this.providers);
     const path = this.path(connector.id);
     mkdirSync(join(this.root, 'connectors', connector.id), { recursive: true });
     const tmp = `${path}.${crypto.randomUUID()}.tmp`; writeFileSync(tmp, JSON.stringify(connector, null, 2) + '\n', { mode: 0o600 }); renameSync(tmp, path); return connector;
   }
+  /** Create a new connector with an opaque, server-generated ID. The ID is never user input. */
+  create(value: ConnectorDefinition): Connector {
+    const validated = validateConnector({ ...value, id: 'connector' }, this.providers);
+    mkdirSync(join(this.root, 'connectors'), { recursive: true });
+    const base = (validated.provider || validated.name).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'connector';
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const candidate = `${base}-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
+      const dir = join(this.root, 'connectors', candidate);
+      try { mkdirSync(dir); } catch (error: any) { if (error?.code === 'EEXIST') continue; throw error; }
+      try { return this.register({ ...validated, id: candidate }); }
+      catch (error) { rmSync(dir, { recursive: true, force: true }); throw error; }
+    }
+    throw new Error('Could not allocate a connector ID');
+  }
   get(connectorId: string): Connector {
-    const connector = validateConnector(JSON.parse(readFileSync(this.path(connectorId), 'utf8')));
+    const connector = validateConnector(JSON.parse(readFileSync(this.path(connectorId), 'utf8')), this.providers);
     if (connector.id !== connectorId) throw new Error('Connector file ID mismatch'); return connector;
   }
   list(): Connector[] {
     let entries; try { entries = readdirSync(join(this.root, 'connectors'), { withFileTypes: true }); } catch (error: any) { if (error.code === 'ENOENT') return []; throw error; }
     return entries.filter(e => e.isDirectory() && existsSync(join(this.root, 'connectors', e.name, 'connector.json'))).map(e => this.get(e.name)).sort((a,b) => a.id.localeCompare(b.id));
   }
-  remove(connectorId: string) { rmSync(this.path(connectorId), { force: true }); }
+  listPublic(): PublicConnector[] {
+    return this.list().map(connector => {
+      if (connector.transport !== 'builtin') return connector as PublicConnector;
+      const { credentials = {}, ...rest } = connector;
+      return { ...rest, credentialsSet: Object.keys(credentials).filter(key => Boolean(credentials[key])).sort() } as PublicConnector;
+    });
+  }
+  setCredentials(connectorId: string, update: Record<string, string>): Connector {
+    const connector = this.get(connectorId);
+    const credentials: Record<string, string> = { ...(connector.credentials ?? {}) };
+    for (const [key, value] of Object.entries(update)) { if (value) credentials[key] = value; else delete credentials[key]; }
+    return this.register({ ...connector, credentials });
+  }
+  remove(connectorId: string) {
+    const connector = this.get(connectorId);
+    rmSync(join(this.root, 'connectors', connector.id), { recursive: true, force: true });
+  }
+  async disconnect(connectorId: string): Promise<void> {
+    const connector = this.get(connectorId);
+    if (connector.transport !== 'builtin') throw new Error('Only builtin connectors support disconnecting');
+    const provider = this.providers.get(connector.provider!);
+    if (!provider?.disconnect) throw new Error('This connector has no sign-in to disconnect');
+    await provider.disconnect(this.context(connector));
+  }
+  async test(connectorId: string, options: CallOptions = {}): Promise<unknown> {
+    const connector = this.get(connectorId);
+    if (connector.transport !== 'builtin') throw new Error('Only builtin connectors support the test button');
+    const provider = this.providers.get(connector.provider!);
+    if (!provider?.test) throw new Error('This connector has no test action');
+    return provider.test(this.context(connector), options);
+  }
+  /** Test an unsaved draft, merging stored secrets for an existing connector. */
+  async testDraft(value: unknown, options: CallOptions = {}): Promise<unknown> {
+    const v = object(value);
+    let previous: Connector | undefined;
+    if (typeof v.id === 'string' && v.id.trim()) { try { previous = this.get(v.id.trim()); } catch { /* new draft */ } }
+    const incoming = v.credentials === undefined ? {} : stringMap(v.credentials);
+    const credentials: Record<string, string> = { ...(previous?.credentials ?? {}) };
+    for (const [key, val] of Object.entries(incoming)) if (val) credentials[key] = val;
+    const connector = validateConnector({
+      id: 'connector',
+      name: 'Connector test',
+      description: '',
+      transport: 'builtin',
+      provider: v.provider,
+      settings: object(v.settings ?? {}),
+      credentials,
+      tools: [],
+    }, this.providers);
+    const provider = this.providers.get(connector.provider!);
+    if (!provider?.test) throw new Error('This connector has no test action');
+    return provider.test({ connectorId: previous?.id ?? 'test', settings: connector.settings ?? {}, credentials: connector.credentials ?? {} }, options);
+  }
+  private context(connector: Connector): BuiltinProviderContext {
+    return {
+      connectorId: connector.id,
+      settings: connector.settings ?? {},
+      credentials: connector.credentials ?? {},
+      updateCredentials: credentials => { this.setCredentials(connector.id, credentials); },
+    };
+  }
   async call(connectorId: string, tool: string, args: unknown, options: CallOptions = {}): Promise<unknown> {
     const connector = this.get(connectorId);
     if (!connector.tools.some(t => t.name === tool)) throw new Error(`Unknown tool: ${tool}`);
+    if (connector.transport === 'builtin') {
+      const provider = this.providers.get(connector.provider!);
+      if (!provider) throw new Error(`Unknown builtin provider: ${connector.provider}`);
+      return provider.call(tool, object(args ?? {}), this.context(connector), options);
+    }
     if (connector.transport === 'mcp') throw new Error('MCP calls belong to the official coding-agent MCP client');
     const body = { tool, arguments: args, config: {} };
     const timeoutMs = options.timeoutMs ?? connector.timeoutMs ?? 60_000;

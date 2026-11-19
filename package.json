@@ -30,6 +30,8 @@
     "cron-parser": "5.10.5",
     "lucide-react": "1.72.0",
     "monaco-editor": "0.57.0",
+    "node-ical": "0.27.6",
+    "qrcode.react": "4.2.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-markdown": "10.1.0",
@@ -37,6 +39,7 @@
     "remark-breaks": "4.0.0",
     "remark-gfm": "4.0.1",
     "tailwindcss": "4.3.5",
+    "tsdav": "2.5.1",
     "typebox": "1.4.7"
   },
   "devDependencies": {
