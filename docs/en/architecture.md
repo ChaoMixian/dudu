@@ -11,7 +11,9 @@ Browser (React)
 dudu server (Bun)
       ├── Store (SQLite)
       ├── Scheduler ──► Pi AgentSession
-      ├── ConnectorRegistry (external command / http / mcp)
+      ├── ConnectorRegistry (built-in / command / http / mcp)
+      ├── WeixinService ──► official QR login + getupdates long-poll
+      ├── SkillStore ──► workspace skills/
       └── Computer / BotdSupervisor ──► Xvfb / Xfce / voxl
 ```
 
@@ -77,6 +79,22 @@ message_send route={kind:'bot'}
 
 `messages.kind` supports `message`, `ask`, `reaction`, `takeover`, `bot_out`, and `bot_in`. Attachments are copied into the Bot's `artifacts/`; messages store only metadata and authenticated URLs.
 
+Inbound WeChat:
+
+```text
+WeixinService.getupdates
+  → writes a user message to the main timeline
+  → publishes message.weixin with payload.externalReply = <connectorId>__send_text
+  → Scheduler delivers to the bound Bot
+  → the Bot calls send_text: sends to WeChat and writes the reply to the main timeline
+```
+
+WeChat is a connector bound to one Bot. It does not introduce a Route/channel abstraction or change the main timeline.
+
+## Skills
+
+`SkillStore` manages `<workspace>/skills/`. `createPi` adds that directory to `additionalSkillPaths`; installing or removing a skill invalidates every Bot, so the next idle session reloads the skill list.
+
 ## Computers
 
 - Each Bot has its own desktop. A supervisor inside the dudu process owns Xvfb, the window manager, the private HOME, D-Bus, and voxl.
@@ -104,7 +122,9 @@ message_send route={kind:'bot'}
 - `GET /api/bots/:botId/peers/:peerId/messages`: full Bot-to-Bot history.
 - `POST /api/messages` (optional `attachments`), `POST /api/reactions`.
 - `PUT /api/providers`, `PUT /api/defaults`, `PUT /api/computer-settings` (desktop auto-start), `PUT /api/advanced-settings`, `PUT /api/setup/password`, `PUT /api/setup`.
-- `POST /api/connectors`, `POST /api/sources`, `POST /api/sources/:id/enable|disable|trigger`, `DELETE /api/sources/:id`.
+- `GET /api/connectors/catalog`, `POST /api/connectors`, `DELETE /api/connectors/:id`, `POST /api/connectors/:id/test|disconnect`; WeChat login, status, and messages under `/api/connectors/:id/weixin/*`; Outlook device-code under `/api/connectors/:id/outlook/device/*`; first-time sign-in for an unsaved connector uses `/api/weixin/login/*` and `/api/outlook/device/*`.
+- `GET /api/skills`, `GET /api/skills/popular`, `GET /api/skills/search?q=`, `POST /api/skills/inspect|install`, `DELETE /api/skills/:slug`.
+- `POST /api/sources`, `POST /api/sources/:id/enable|disable|trigger`, `DELETE /api/sources/:id`.
 - Computers: `GET .../computer/status|shot|watch`, `POST .../start|stop|takeover`.
 - Files: `POST .../uploads` (composer), `GET/POST/DELETE .../files`, `POST .../files/mkdir`, `GET .../file`.
 - Terminal: `POST .../terminal`, `GET .../terminal/ws?ticket=...` (short-lived ticket WebSocket).

@@ -61,7 +61,10 @@ PATH="$HOME/.cargo/bin:$PATH" bun run start
 ├── .dudu/config.json          # 全局配置、provider、默认模型
 ├── .dudu/state.sqlite         # 收件箱、序号、运行状态、会话路径
 ├── .dudu/botd/                # 桌面状态、私有 HOME 与运行时数据
+├── .dudu/weixin/              # 微信游标、联系人映射与最近消息
+├── .dudu/skills.json          # 技能来源元数据
 ├── connectors/<id>/connector.json
+├── skills/<slug>/SKILL.md     # 工作区共享技能
 └── bots/<botId>/
     ├── bot.json
     ├── BOTS.md
@@ -84,6 +87,9 @@ PATH="$HOME/.cargo/bin:$PATH" bun run start
 | `DUDU_TOKEN` | Bearer token；未设置访问密码时也可作为登录密码；也可在 config.json 中设置 |
 | `DUDU_URL` | CLI 访问的 dudu 地址 |
 | `UI_PREVIEW_PORT` | 隔离 UI 预览端口 |
+| `DUDU_MICROSOFT_CLIENT_ID` | 覆盖 Outlook 日历的 Entra public client ID；默认使用 dudu 内置应用 |
+| `DUDU_MICROSOFT_TENANT` | Outlook 登录租户，默认 `common` |
+| `GITHUB_TOKEN` | 可选；提高 GitHub 仓库扫描和技能安装的 API 限额 |
 
 暴露到局域网或公网前必须在首次设置中设置访问密码，或至少配置 `DUDU_TOKEN`，并配合 HTTPS 反向代理与访问控制。
 
@@ -156,7 +162,7 @@ Bot 间通信的保护：
 
 - dudu 进程内的 supervisor 负责启动 Xvfb/桌面会话
 - Agent 的 computer 工具是 dudu 内置能力，直接调用 `Computer.cua()`，不经过连接器、MCP 或 HTTP
-- 设置 → 连接器里的“启动时自动拉起桌面”控制 dudu 启动时是否恢复所有桌面（默认开启）
+- 设置 → 电脑里的“随 dudu 启动”控制 dudu 启动时是否恢复所有桌面（默认开启）
 - 即使关闭该开关，Bot 第一次调用电脑工具时也会自动启动自己已停止的桌面
 - Bot 也可以直接调用 `computer__status` / `computer__start` / `computer__stop`
 - dudu 以 `/api/bots/:botId/computer/live/` 同源代理 voxl 的 HTTP 与 WebSocket

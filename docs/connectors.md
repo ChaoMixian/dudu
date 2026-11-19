@@ -27,7 +27,28 @@
 }
 ```
 
-`transport` 只支持 `command`、`http`、`mcp`。连接器配置是运维输入，不是模型生成的参数；不要注册不受信任的可执行文件或 URL。这些适配器不是 OS 沙箱。
+`transport` 支持 `command`、`http`、`mcp`、`builtin`。`builtin` 是 dudu 直接实现的内置服务；普通用户从“添加连接器”目录配置，同一 provider 可以添加多个实例。连接器配置是运维输入，不是模型生成的参数；不要注册不受信任的可执行文件或 URL。这些适配器不是 OS 沙箱。
+
+## 内置连接器
+
+- **Bark**：填写 Bark App 里的推送地址，自动解析服务器和设备 Key；工具 `send`。
+- **天气**：填写城市；使用 Open-Meteo 查询当前天气、预报和空气质量，无需 API Key。
+- **CalDAV**：读写 iCloud 或任意标准 CalDAV 日历。iCloud 使用 `https://caldav.icloud.com` + Apple ID + App 专用密码；工具为 `list_calendars`、`list_events`、`create_event`、`update_event`、`delete_event`。
+- **Outlook Calendar**：使用内置 Microsoft 应用和设备码登录，无需填写 Client ID、无回调、无 client secret。自建应用可设置 `DUDU_MICROSOFT_CLIENT_ID` 和 `DUDU_MICROSOFT_TENANT`；工具与 CalDAV 相同。
+- **微信**：绑定一个 Bot，使用官方扫码登录和 `getupdates` 长轮询，不需要公网回调。
+
+添加需要登录的连接器时，先完成配置再授权；编辑只保存配置，登录和退出是独立操作。
+
+### 微信
+
+微信连接器入站时：
+
+1. 把微信文本写入该 Bot 的主时间线；
+2. 发布 `message.weixin` 事件，payload 带 `peer`、`messageId` 和 `externalReply`；
+3. Bot 调用 `externalReply.tool`（即 `<连接器ID>__send_text`）回复微信，工具会同时把回复记录到主时间线；
+4. Bot 也可以改用 `message_send` 只回复 dudu Web。
+
+工具 `send_text` 用于主动发消息：`to` 省略时发给最近联系人。当前只处理文本；图片、语音和文件显示为占位。微信登录态、游标、联系人和最近消息保存在 `<workspace>/.dudu/weixin/`。
 
 ## Command
 
@@ -102,7 +123,7 @@ MCP 客户端的环境和生命周期遵循官方实现。
 ## 测试
 
 ```sh
-bun test tests/connectors.test.ts tests/sources.test.ts
+bun test tests/connectors.test.ts tests/builtin-connectors.test.ts tests/web-connectors.test.ts tests/sources.test.ts
 ```
 
 测试使用临时工作区和内存 SQLite，覆盖协议、环境隔离、取消、MCP 映射、校验、游标持久化和进程重启。

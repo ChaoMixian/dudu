@@ -22,6 +22,7 @@ dudu 把 Bot 当作长期在线的协作对象，而不是一次性的聊天窗�
 - **独立电脑**：每个 Bot 有自己的 Linux 桌面，可以打开浏览器、终端和桌面应用。
 - **主动沟通**：Bot 会主动发消息、提问、发送文件，也能请求你接管电脑。
 - **Bot 协作**：Bot 之间可以互发消息、分工和交接，完整往来可查看。
+- **开箱即用的连接**：Bark、微信、天气、iCloud/CalDAV、Outlook 日历，以及从 skills.sh 或仓库安装的技能。
 - **本地优先**：配置、记忆、文件和会话都保存在本机工作区。
 
 Bot 之间的完整往来记录：
@@ -118,6 +119,7 @@ bun run screenshots   # 重新生成 README 截图（需要 Chrome/Chromium）
 
 - [运行与部署](docs/operations.md)
 - [架构](docs/architecture.md)
+- [技能](docs/skills.md)
 - [连接器与事件协议](docs/connectors.md)
 
 英文版：[README.en.md](README.en.md) · [English docs](docs/en/operations.md)

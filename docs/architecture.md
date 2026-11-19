@@ -11,7 +11,9 @@ Browser (React)
 dudu server (Bun)
       ├── Store (SQLite)
       ├── Scheduler ──► Pi AgentSession
-      ├── ConnectorRegistry（外部 command / http / mcp）
+      ├── ConnectorRegistry（内置服务 / command / http / mcp）
+      ├── WeixinService ──► 官方扫码登录 + getupdates 长轮询
+      ├── SkillStore ──► 工作区 skills/
       └── Computer / BotdSupervisor ──► Xvfb / Xfce / voxl
 ```
 
@@ -77,6 +79,22 @@ message_send route={kind:'bot'}
 
 `messages` 的 `kind` 支持 `message`、`ask`、`reaction`、`takeover`、`bot_out`、`bot_in`。附件会复制到 Bot 的 `artifacts/`，消息只保存元数据和鉴权 URL。
 
+微信入站：
+
+```text
+WeixinService.getupdates
+  → messages 表写入用户消息（主时间线）
+  → events 表写入 message.weixin，payload.externalReply 指向 <connectorId>__send_text
+  → Scheduler 交付给绑定的 Bot
+  → Bot 调用 send_text：发往微信，同时写入主时间线
+```
+
+微信是绑定单个 Bot 的连接器；不使用 Route/channel 抽象，也不改变主时间线结构。
+
+## 技能
+
+`SkillStore` 管理 `<workspace>/skills/`。`createPi` 把该目录加入 `additionalSkillPaths`；安装或删除技能后会 invalidate 所有 Bot，下一次空闲时重建 session 并加载新的技能列表。
+
 ## 电脑
 
 - 每个 Bot 拥有独立桌面；dudu 进程内的 supervisor 负责 Xvfb、窗口管理器、私有 HOME、DBus 和 voxl。
@@ -104,7 +122,9 @@ message_send route={kind:'bot'}
 - `GET /api/bots/:botId/peers/:peerId/messages`：Bot 间完整往来。
 - `POST /api/messages`（可带 `attachments`），`POST /api/reactions`。
 - `PUT /api/providers`，`PUT /api/defaults`，`PUT /api/computer-settings`（启动时自动拉起桌面），`PUT /api/advanced-settings`，`PUT /api/setup/password`，`PUT /api/setup`。
-- `POST /api/connectors`，`POST /api/sources`，`POST /api/sources/:id/enable|disable|trigger`，`DELETE /api/sources/:id`。
+- `GET /api/connectors/catalog`，`POST /api/connectors`，`DELETE /api/connectors/:id`，`POST /api/connectors/:id/test|disconnect`；微信登录、状态和消息在 `/api/connectors/:id/weixin/*`；Outlook 设备码在 `/api/connectors/:id/outlook/device/*`；未保存连接器的首次授权走 `/api/weixin/login/*` 和 `/api/outlook/device/*`。
+- `GET /api/skills`，`GET /api/skills/popular`，`GET /api/skills/search?q=`，`POST /api/skills/inspect|install`，`DELETE /api/skills/:slug`。
+- `POST /api/sources`，`POST /api/sources/:id/enable|disable|trigger`，`DELETE /api/sources/:id`。
 - 电脑：`GET .../computer/status|shot|watch`，`POST .../start|stop|takeover`。
 - 文件：`POST .../uploads`（输入框附件），`GET/POST/DELETE .../files`，`POST .../files/mkdir`，`GET .../file`。
 - 终端：`POST .../terminal`，`GET .../terminal/ws?ticket=...`（短时 ticket WebSocket）。

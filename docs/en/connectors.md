@@ -27,7 +27,28 @@ Connector definition:
 }
 ```
 
-`transport` supports only `command`, `http`, and `mcp`. Connector configuration is operator input, not model-generated arguments. Do not register untrusted executables or URLs. These adapters are not OS sandboxes.
+`transport` supports `command`, `http`, `mcp`, and `builtin`. `builtin` services are implemented by dudu; users configure them from the **Add connector** catalog, and the same provider can have multiple instances. Connector configuration is operator input, not model-generated arguments. Do not register untrusted executables or URLs. These adapters are not OS sandboxes.
+
+## Built-in connectors
+
+- **Bark**: paste the push URL from the Bark app; the server URL and device key are parsed automatically. Tool: `send`.
+- **Weather**: choose a city; current weather, forecast, and air quality come from Open-Meteo with no API key.
+- **CalDAV**: read and write iCloud or any standard CalDAV calendar. iCloud uses `https://caldav.icloud.com` with an Apple ID and app-specific password. Tools: `list_calendars`, `list_events`, `create_event`, `update_event`, `delete_event`.
+- **Outlook Calendar**: device-code sign-in with the built-in Microsoft app; no Client ID field, callback, or client secret. Set `DUDU_MICROSOFT_CLIENT_ID` and `DUDU_MICROSOFT_TENANT` only when using your own app. Tools match CalDAV.
+- **WeChat**: bind one Bot and sign in with the official QR flow and `getupdates` long-poll; no public callback is required.
+
+For connectors with sign-in, finish setup first and authorize as a separate step. Editing only saves configuration; sign-in and sign-out are separate actions.
+
+### WeChat
+
+For an inbound WeChat message, dudu:
+
+1. writes the text to the Bot's main timeline;
+2. publishes a `message.weixin` event with `peer`, `messageId`, and `externalReply`;
+3. lets the Bot call `externalReply.tool` (`<connectorId>__send_text`) to reply on WeChat; the tool also records the reply in the timeline;
+4. or use `message_send` to answer only in dudu.
+
+`send_text` can also send proactively; omit `to` to use the most recent peer. Only text is handled today; images, voice, and files appear as placeholders. Login state, cursor, peers, and recent messages live under `<workspace>/.dudu/weixin/`.
 
 ## Command
 
@@ -102,7 +123,7 @@ The computer capability is used inside the dudu process; there is no separate bo
 ## Tests
 
 ```sh
-bun test tests/connectors.test.ts tests/sources.test.ts
+bun test tests/connectors.test.ts tests/builtin-connectors.test.ts tests/web-connectors.test.ts tests/sources.test.ts
 ```
 
 Tests use temporary workspaces and in-memory SQLite, covering the protocol, environment isolation, cancellation, MCP mapping, validation, cursor persistence, and process restart.

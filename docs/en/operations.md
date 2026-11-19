@@ -61,7 +61,10 @@ Workspace files are the source of truth:
 ├── .dudu/config.json          # global config, providers, default model
 ├── .dudu/state.sqlite         # inbox, sequence, run state, session paths
 ├── .dudu/botd/                # desktop state, private HOME, runtime data
+├── .dudu/weixin/              # WeChat cursor, peer map, recent messages
+├── .dudu/skills.json          # skill source metadata
 ├── connectors/<id>/connector.json
+├── skills/<slug>/SKILL.md     # workspace-wide skills
 └── bots/<botId>/
     ├── bot.json
     ├── BOTS.md
@@ -84,6 +87,9 @@ Workspace files are the source of truth:
 | `DUDU_TOKEN` | Bearer token; also accepted as the login password when no access password is set; can be set in `config.json` |
 | `DUDU_URL` | dudu address used by the CLI |
 | `UI_PREVIEW_PORT` | Isolated UI preview port |
+| `DUDU_MICROSOFT_CLIENT_ID` | Override the Entra public client ID for Outlook calendar; the built-in dudu app is used by default |
+| `DUDU_MICROSOFT_TENANT` | Outlook sign-in tenant, default `common` |
+| `GITHUB_TOKEN` | Optional; raises GitHub API limits for repository inspection and skill installation |
 
 Before exposing dudu to a LAN or the public internet, set an access password during first-run setup, or at least configure `DUDU_TOKEN`, and put dudu behind an HTTPS reverse proxy with access control.
 
@@ -156,7 +162,7 @@ Bot desktops need no service URL. Each Bot gets its own desktop:
 
 - A supervisor inside the dudu process starts Xvfb and the desktop session
 - Agent computer tools are a built-in dudu capability that calls `Computer.cua()` directly; no connector, MCP subprocess, or HTTP hop
-- **Settings → Connectors → Start desktops on launch** controls whether dudu restores all desktops at startup (on by default)
+- **Settings → Computers → Start with dudu** controls whether dudu restores all desktops at startup (on by default)
 - Even with that setting off, the first computer tool call starts the Bot's stopped desktop
 - Bots can also call `computer__status`, `computer__start`, and `computer__stop` directly
 - dudu proxies voxl HTTP and WebSocket through `/api/bots/:botId/computer/live/`

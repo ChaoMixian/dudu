@@ -22,6 +22,7 @@ dudu treats Bots as long-lived collaborators rather than one-off chat windows. A
 - **A real computer** — each Bot has its own Linux desktop for browsers, terminals, and desktop apps.
 - **Proactive** — Bots can start conversations, ask questions, send files, and request computer takeover.
 - **Collaboration** — Bots message each other, split work, and hand off tasks, with a full history.
+- **Ready-made connections** — Bark, WeChat, weather, iCloud/CalDAV, Outlook calendars, and skills from skills.sh or a repository.
 - **Local first** — configuration, memory, files, and sessions stay in a workspace on your machine.
 
 Full Bot-to-Bot history:
@@ -119,6 +120,7 @@ bun run screenshots   # regenerate README screenshots (needs Chrome/Chromium)
 - [Operations and deployment](docs/en/operations.md)
 - [Architecture](docs/en/architecture.md)
 - [Connectors and event protocol](docs/en/connectors.md)
+- [Skills](docs/en/skills.md)
 
 Chinese: [README.md](README.md) · [中文文档](docs/operations.md)
 
