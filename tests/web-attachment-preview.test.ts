@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { MessageAttachment } from '../src/contracts';
 import { loadAttachmentPreview } from '../src/web/lib/attachment-preview';
+import { attachmentKind, attachmentLabel, isMarkdown } from '../src/web/lib/preview';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -61,4 +62,29 @@ test('cancellation during text decoding cannot publish stale content', async () 
   response.blob = async () => blob;
   respond(response);
   await expect(loadAttachmentPreview('', attachment, controller.signal)).rejects.toThrow();
+});
+
+test('office formats are detected by mime or extension', () => {
+  expect(attachmentKind('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'report.docx')).toBe('word');
+  expect(attachmentKind('application/octet-stream', 'report.docx')).toBe('word');
+  expect(attachmentKind('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'data.xlsx')).toBe('spreadsheet');
+  expect(attachmentKind('application/vnd.ms-excel', 'data.xls')).toBe('spreadsheet');
+  expect(attachmentKind('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'deck.pptx')).toBe('presentation');
+  expect(attachmentKind('application/msword', 'legacy.doc')).toBe('file');
+  expect(attachmentKind('application/pdf', 'report.pdf')).toBe('pdf');
+});
+
+test('attachment labels prefer the file extension', () => {
+  expect(attachmentLabel('report.pdf', 'pdf')).toBe('PDF');
+  expect(attachmentLabel('deck.pptx', 'presentation')).toBe('PPTX');
+  expect(attachmentLabel('no-extension', 'word')).toBe('DOC');
+});
+
+test('text and markdown extensions preview even with a generic mime type', () => {
+  expect(attachmentKind('application/octet-stream', 'notes.md')).toBe('text');
+  expect(attachmentKind('application/octet-stream', 'readme.txt')).toBe('text');
+  expect(attachmentKind('text/plain', 'notes.markdown')).toBe('text');
+  expect(isMarkdown('notes.md')).toBe(true);
+  expect(isMarkdown('NOTES.MARKDOWN')).toBe(true);
+  expect(isMarkdown('notes.txt')).toBe(false);
 });

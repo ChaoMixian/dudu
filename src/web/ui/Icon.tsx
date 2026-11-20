@@ -1,5 +1,5 @@
 import {
-  ArrowUp, AudioLines, Braces, Check, ChevronRight, CircleHelp, Clock3, Container, Copy, FileArchive, FileCode2, FileText, Folder, FolderPlus, GitBranch, Globe2,
+  ArrowUp, AudioLines, Braces, Check, ChevronRight, CircleHelp, Clock3, Container, Copy, FileArchive, FileCode2, FileText, Folder, FolderPlus, GitBranch, Globe2, Maximize2,
   Download, Hash, Image, LayoutGrid, Link2, LogOut, MessageCircle, Mic, Monitor, Moon, MoreHorizontal, PanelLeft, PanelRight,
   Paperclip, Pause, Pin, Play, Plus, Plug, RefreshCw, Reply, ScrollText, Search, Settings2, SlidersHorizontal, SmilePlus,
   Sparkles, Square, SquarePen, Sun, Terminal, Trash2, Upload, UserRound, Workflow, X,
@@ -17,7 +17,7 @@ const icons = {
   file: FileText, download: Download, folder: Folder, folderPlus: FolderPlus, terminal: Terminal,
   session: ScrollText, paperclip: Paperclip, trash: Trash2, upload: Upload,
   braces: Braces, fileCode: FileCode2, fileArchive: FileArchive, container: Container,
-  gitBranch: GitBranch, hash: Hash, link: Link2,
+  gitBranch: GitBranch, hash: Hash, link: Link2, expand: Maximize2,
 };
 
 export type IconName = keyof typeof icons;

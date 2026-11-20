@@ -1,23 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 import { Spinner } from '@heroui/react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import type { MessageAttachment } from '../../contracts';
-import { loadAttachmentPreview } from '../lib/attachment-preview';
-import { previewKind } from '../lib/preview';
+import { downloadAttachment, loadAttachmentPreview } from '../lib/attachment-preview';
+import { errorText } from '../lib/api';
 import { formatBytes } from '../lib/format';
+import { attachmentKind, attachmentLabel, isMarkdown } from '../lib/preview';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n';
+import { useLive } from '../state/LiveContext';
+import AttachmentPreviewDialog from './AttachmentPreviewDialog';
 import Icon from './Icon';
+import OfficePreview from './OfficePreview';
+import PdfThumbnail from './PdfThumbnail';
 
-type Resource = { status: 'loading' } | { status: 'error' } | { status: 'ready'; url: string; text: string; truncated: boolean };
+type Thumbnail = { status: 'loading' } | { status: 'error' } | { status: 'ready'; url?: string; blob?: Blob; text?: string };
 
 function Attachment({ attachment, token }: { attachment: MessageAttachment; token: string }) {
   const { t } = useI18n();
-  const [resource, setResource] = useState<Resource>({ status: 'loading' });
-  const [media, setMedia] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [attempt, setAttempt] = useState(0);
-  const hostRef = useRef<HTMLDivElement>(null);
+  const { notify } = useLive();
+  const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false);
-  const kind = previewKind(attachment.mime);
+  const [thumbnail, setThumbnail] = useState<Thumbnail>({ status: 'loading' });
+  const hostRef = useRef<HTMLDivElement>(null);
+  const kind = attachmentKind(attachment.mime, attachment.name);
+  const label = attachmentLabel(attachment.name, kind);
 
   useEffect(() => {
     const node = hostRef.current;
@@ -33,70 +42,59 @@ function Attachment({ attachment, token }: { attachment: MessageAttachment; toke
   }, []);
 
   useEffect(() => {
-    if (!visible) return;
+    const office = kind === 'word' || kind === 'spreadsheet' || kind === 'presentation';
+    if (!visible || (kind !== 'image' && kind !== 'pdf' && kind !== 'text' && !office)) return;
     const controller = new AbortController();
     let objectUrl: string | undefined;
-    setResource({ status: 'loading' });
-    setMedia('loading');
+    setThumbnail({ status: 'loading' });
     void loadAttachmentPreview(token, attachment, controller.signal).then(result => {
       if (controller.signal.aborted) return;
-      objectUrl = URL.createObjectURL(result.blob);
-      setResource({ status: 'ready', url: objectUrl, text: result.text, truncated: result.truncated });
-    }).catch(() => { if (!controller.signal.aborted) setResource({ status: 'error' }); });
-    return () => {
-      controller.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [visible, attachment.url, attachment.mime, token, attempt]);
+      if (kind === 'image') {
+        objectUrl = URL.createObjectURL(result.blob);
+        setThumbnail({ status: 'ready', url: objectUrl });
+      } else if (kind === 'text') {
+        setThumbnail({ status: 'ready', text: result.text });
+      } else {
+        setThumbnail({ status: 'ready', blob: result.blob });
+      }
+    }).catch(() => { if (!controller.signal.aborted) setThumbnail({ status: 'error' }); });
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [visible, kind, token, attachment.url, attachment.mime, attachment.name]);
 
-  const retry = () => {
-    setResource({ status: 'loading' });
-    setMedia('loading');
-    setAttempt(value => value + 1);
+  const download = async () => {
+    try { await downloadAttachment(token, attachment); }
+    catch (cause) { notify('error', errorText(cause)); }
   };
-  const failed = resource.status === 'error' || media === 'error';
-  const loading = !failed && (resource.status === 'loading'
-    || (kind !== 'file' && kind !== 'text' && media === 'loading'));
-  const failure = t(resource.status === 'error' ? 'message.attachmentFailed' : 'message.previewFailed');
 
-  return (
-    <div ref={hostRef} className="attachment">
-      <div className="attachment-head">
-        <span className="attachment-icon"><Icon name={kind === 'image' ? 'image' : 'file'} size={17} /></span>
-        <span className="attachment-meta">
-          <span className="attachment-name" title={attachment.name}>{attachment.name}</span>
-          <span className={`attachment-sub${failed && kind === 'file' ? ' attachment-error-text' : ''}`} title={failed && kind === 'file' ? failure : attachment.mime} role={failed && kind === 'file' ? 'alert' : undefined}>
-            {failed && kind === 'file' ? failure : `${formatBytes(attachment.size)} · ${attachment.mime}`}
-          </span>
-        </span>
-        <span className="attachment-action">
-          {resource.status === 'ready'
-            ? <a className="attachment-download" href={resource.url} download={attachment.name} aria-label={t('message.downloadFile')} title={t('message.downloadFile')}><Icon name="download" size={16} /></a>
-            : resource.status === 'error'
-              ? <button className="attachment-download" type="button" onClick={retry} aria-label={t('common.retry')} title={t('common.retry')}><Icon name="refresh" size={16} /></button>
-              : <Spinner size="sm" aria-label={t('message.attachmentLoading')} />}
-        </span>
-      </div>
-      {kind !== 'file' && (
-        <div className={`attachment-preview attachment-preview-${kind}`} data-error={failed ? 'true' : undefined} aria-busy={loading}>
-          {resource.status === 'ready' && media !== 'error' && (kind === 'image'
-            ? <a className="attachment-image-link" href={resource.url} target="_blank" rel="noreferrer"><img className="attachment-image" src={resource.url} alt={attachment.name} onLoad={() => setMedia('ready')} onError={() => setMedia('error')} /></a>
-            : kind === 'video'
-              ? <video className="attachment-video" src={resource.url} controls playsInline preload="metadata" onLoadedMetadata={() => setMedia('ready')} onError={() => setMedia('error')} />
-              : kind === 'audio'
-                ? <audio className="attachment-audio" src={resource.url} controls preload="metadata" onLoadedMetadata={() => setMedia('ready')} onError={() => setMedia('error')} />
-                : kind === 'pdf'
-                  ? <iframe className="attachment-pdf" src={resource.url} title={attachment.name} onLoad={() => setMedia('ready')} onError={() => setMedia('error')} />
-                  : <pre className="attachment-text">{resource.text}{resource.truncated ? '\n…' : ''}</pre>)}
-          {loading && <div className="attachment-placeholder"><Spinner size="sm" aria-label={t('message.attachmentLoading')} /></div>}
-          {failed && <div className="attachment-placeholder attachment-error">
-            <span role="alert">{failure}</span>
-            <button className="attachment-retry" type="button" onClick={retry}>{t('common.retry')}</button>
-          </div>}
-        </div>
-      )}
-    </div>
-  );
+  return <div ref={hostRef} className="attachment-card-wrap">
+    {kind === 'image' || kind === 'pdf' || kind === 'word' || kind === 'spreadsheet' || kind === 'presentation' || kind === 'text' ? <div className={`attachment-card attachment-card-${kind === 'image' ? 'image' : kind === 'pdf' ? 'pdf' : kind === 'text' ? 'text' : 'office'}`}>
+      {kind === 'image' && <button type="button" className="attachment-card-hit" aria-label={`${t('message.preview')}: ${attachment.name}`} title={t('message.preview')} onClick={() => setOpen(true)} />}
+      {kind === 'image' && (thumbnail.status === 'ready' && thumbnail.url
+        ? <img src={thumbnail.url} alt={attachment.name} />
+        : <span className="attachment-card-placeholder">{thumbnail.status === 'error' ? <Icon name="file" size={22} /> : <Spinner size="sm" aria-label={t('message.attachmentLoading')} />}</span>)}
+      {kind === 'pdf' && (thumbnail.status === 'ready' && thumbnail.blob
+        ? <PdfThumbnail blob={thumbnail.blob} />
+        : <span className="attachment-card-placeholder">{thumbnail.status === 'error' ? <Icon name="file" size={22} /> : <Spinner size="sm" aria-label={t('message.attachmentLoading')} />}</span>)}
+      {(kind === 'word' || kind === 'spreadsheet' || kind === 'presentation') && (thumbnail.status === 'ready' && thumbnail.blob
+        ? <OfficePreview kind={kind} blob={thumbnail.blob} />
+        : <span className="attachment-card-placeholder">{thumbnail.status === 'error' ? <Icon name="file" size={22} /> : <Spinner size="sm" aria-label={t('message.attachmentLoading')} />}</span>)}
+      {kind === 'text' && (thumbnail.status === 'ready' && thumbnail.text !== undefined
+        ? isMarkdown(attachment.name)
+          ? <div className="chat-markdown attachment-card-markdown"><Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{thumbnail.text}</Markdown></div>
+          : <pre className="attachment-card-text-content">{thumbnail.text}</pre>
+        : <span className="attachment-card-placeholder">{thumbnail.status === 'error' ? <Icon name="file" size={22} /> : <Spinner size="sm" aria-label={t('message.attachmentLoading')} />}</span>)}
+      <span className="attachment-card-caption"><span className="attachment-card-name" title={attachment.name}>{attachment.name}</span></span>
+      <button type="button" className="attachment-card-expand" aria-label={t('message.preview')} title={t('message.preview')} onClick={() => setOpen(true)}><Icon name="expand" size={14} /></button>
+      <button type="button" className="attachment-card-download" aria-label={t('message.downloadFile')} title={t('message.downloadFile')} onClick={() => void download()}><Icon name="download" size={15} /></button>
+    </div> : <div className="attachment-card attachment-file-card">
+      <button type="button" className="attachment-card-hit" aria-label={`${t('message.preview')}: ${attachment.name}`} title={t('message.preview')} onClick={() => setOpen(true)} />
+      <span className="attachment-format" data-kind={kind}>{label}</span>
+      <span className="attachment-file-meta"><span className="attachment-card-name" title={attachment.name}>{attachment.name}</span><span className="attachment-card-sub">{formatBytes(attachment.size)} · {label}</span></span>
+      <span className="attachment-file-open" aria-hidden="true"><Icon name="chevron" size={14} /></span>
+      <button type="button" className="attachment-card-download attachment-card-download-file" aria-label={t('message.downloadFile')} title={t('message.downloadFile')} onClick={() => void download()}><Icon name="download" size={15} /></button>
+    </div>}
+    {open && <AttachmentPreviewDialog attachment={attachment} imageUrl={kind === 'image' && thumbnail.status === 'ready' ? thumbnail.url : undefined} onClose={() => setOpen(false)} />}
+  </div>;
 }
 
 export default function MessageAttachments({ attachments }: { attachments?: MessageAttachment[] }) {

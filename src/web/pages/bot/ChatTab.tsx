@@ -665,7 +665,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
                 <Fragment key={`${bot.id}:${message.id}`}>
                   {separates && <div className="my-7 text-center text-[11px] font-medium uppercase tracking-wide text-muted"><time dateTime={message.createdAt}>{timestamp(date)}</time></div>}
                   <div className={`flex ${own ? 'justify-end' : 'justify-start'} ${consecutive ? 'mt-1.5' : 'mt-4'}`}>
-                    <div className={`flex min-w-0 max-w-[82%] flex-col gap-1.5 ${own ? 'items-end' : 'items-start'}`}>
+                    <div className={`chat-message-column flex min-w-0 flex-col gap-1.5 ${own ? 'items-end' : 'items-start'}`}>
                       <div
                         className={`chat-bubble-wrap ${messageReactions?.length ? 'has-reactions' : ''}`}
                         data-react-side={own ? 'left' : 'right'}
@@ -696,7 +696,7 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
                               : <span key={emoji} className="message-reaction">{emoji}{count > 1 && <span className="message-reaction-count">{count}</span>}</span>)}
                           </div>
                         )}
-                        <div
+                        {(message.text || replied) && <div
                           className={`chat-bubble ${own ? 'chat-bubble-user' : 'chat-bubble-assistant'} ${consecutive ? '' : 'group-start'} ${groupEnd ? 'group-end' : ''}`}
                           style={own ? { background: palette.background, color: palette.foreground } : undefined}
                           title={timestamp(date)}
@@ -705,9 +705,9 @@ export default function ChatTab({ bot, onOpenSettings, onOpenComputers, onOpenPa
                           {message.text && (own
                             ? <p className="chat-selectable whitespace-pre-wrap break-words text-[14.5px] leading-relaxed [overflow-wrap:anywhere]">{message.text}</p>
                             : <div className="chat-markdown chat-selectable text-[14.5px] leading-relaxed"><Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{message.text}</Markdown></div>)}
-                          <MessageAttachments attachments={message.attachments} />
-                        </div>
+                        </div>}
                       </div>
+                      <MessageAttachments attachments={message.attachments} />
                       {message.status === 'failed' && (
                         <span role="status" className="flex items-center gap-1 text-xs text-muted"><Icon name="close" size={12} />{t('message.failed')}</span>
                       )}

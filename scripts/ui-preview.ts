@@ -83,6 +83,44 @@ const previewPopular = [
   { id: 'flowkit-labs/skills/reddit-automation', name: 'reddit-automation', source: 'flowkit-labs/skills', skillId: 'reddit-automation', installs: 1431227 },
   { id: 'mattpocock/skills/tdd', name: 'tdd', source: 'mattpocock/skills', skillId: 'tdd', installs: 1252860 },
 ];
+
+function pdfFixture(): Uint8Array {
+  const stream = 'BT /F1 24 Tf 72 720 Td (dudu PDF preview) Tj ET';
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let body = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(body));
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(body);
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(body);
+}
+
+async function officeFixture(kind: 'docx' | 'xlsx'): Promise<{ bytes: Uint8Array; mime: string }> {
+  if (kind === 'xlsx') {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['Name', 'Value'], ['Alpha', 1], ['Beta', 2], ['Gamma', 3]]), 'Data');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['A', 'B'], ['one', 'two']]), 'Notes');
+    return { bytes: new Uint8Array(XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })), mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+  }
+  const { default: JSZip } = await import('jszip');
+  const zip = new JSZip();
+  if (kind === 'docx') {
+    zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>dudu Office preview</w:t></w:r></w:p><w:p><w:r><w:t>Word documents render in the preview box.</w:t></w:r></w:p><w:p><w:r><w:t>This text comes from a minimal DOCX fixture.</w:t></w:r></w:p></w:body></w:document>');
+    return { bytes: await zip.generateAsync({ type: 'uint8array' }), mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  }
+}
 const desktop = { id: 'workspace-desktop', botId: 'assistant', state: 'stopped', width: 1280, height: 800 };
 const server = Bun.serve({
   hostname: '127.0.0.1', port: Number(process.env.UI_PREVIEW_PORT ?? 7441), idleTimeout: 0,
@@ -105,6 +143,23 @@ const server = Bun.serve({
     if (/^\/api\/connectors\/[^/]+\/weixin\/login\/poll$/.test(path) && req.method === 'POST') return Response.json({ state: 'wait', message: en ? 'Waiting for scan…' : '等待扫码…' });
     if (/^\/api\/connectors\/[^/]+\/outlook\/device\/start$/.test(path) && req.method === 'POST') return Response.json({ deviceCode: 'preview-device', userCode: 'ABC123', verificationUri: 'https://microsoft.com/devicelogin', interval: 5 });
     if (/^\/api\/connectors\/[^/]+\/outlook\/device\/poll$/.test(path) && req.method === 'POST') return Response.json({ status: 'pending', message: en ? 'Waiting for Microsoft sign-in…' : '等待 Microsoft 登录…' });
+    if (path === '/api/preview/attachments/sample.md' && req.method === 'GET') return new Response('# Markdown preview\n\n- **bold**\n- [link](https://example.com)\n\n```js\nconsole.log("dudu")\n```\n', { headers: { 'content-type': 'text/markdown' } });
+    if (path === '/api/preview/attachments/sample.txt' && req.method === 'GET') return new Response('Plain text preview\nSecond line\n', { headers: { 'content-type': 'text/plain' } });
+    if (path === '/api/preview/attachments/sample.pdf' && req.method === 'GET') return new Response(pdfFixture(), { headers: { 'content-type': 'application/pdf', 'cache-control': 'no-store' } });
+    if (/^\/api\/preview\/attachments\/sample\.(docx|xlsx)$/.test(path) && req.method === 'GET') {
+      const result = await officeFixture(path.split('.').pop() as 'docx' | 'xlsx');
+      return new Response(result.bytes, { headers: { 'content-type': result.mime, 'cache-control': 'no-store' } });
+    }
+    if (path === '/api/preview/attachments/tall.svg' && req.method === 'GET') {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1600" viewBox="0 0 800 1600"><rect width="800" height="1600" fill="#f8fafc"/><rect x="48" y="48" width="704" height="1504" rx="18" fill="#fff" stroke="#dbe3ee" stroke-width="4"/><g fill="#334155" font-family="sans-serif"><text x="90" y="140" font-size="42" font-weight="700">Long screenshot</text>${Array.from({length:12},(_,i)=>`<text x="90" y="${230+i*100}" font-size="26">Row ${i+1}: mobile preview content</text>`).join('')}</g></svg>`;
+      return new Response(svg, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' } });
+    }
+    if (path.startsWith('/api/preview/attachments/') && req.method === 'GET') {
+      const label = path.endsWith('/board.svg') ? 'Experiment board' : 'Whiteboard';
+      const color = path.endsWith('/board.svg') ? '#1d4ed8' : '#e5e7eb';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="${color}"/><rect x="80" y="80" width="1040" height="640" rx="18" fill="#ffffff" stroke="#94a3b8" stroke-width="8"/><g fill="#334155" font-family="sans-serif"><text x="140" y="190" font-size="54" font-weight="700">${label}</text><text x="140" y="280" font-size="32">DR · BUS · M = 0</text><text x="140" y="340" font-size="32">PCout / PCin / LADR</text><text x="140" y="400" font-size="32">实验结果表改成三列</text><text x="140" y="460" font-size="32">检查白板与实验设备</text></g></svg>`;
+      return new Response(svg, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' } });
+    }
     if (path === '/api/weixin/login/start' && req.method === 'POST') return Response.json({ sessionKey: 'preview-login', qrUrl: 'https://example.com/weixin-preview' });
     if (path === '/api/weixin/login/poll' && req.method === 'POST') return Response.json({ state: 'wait', message: en ? 'Waiting for scan…' : '等待扫码…' });
     if (path === '/api/outlook/device/start' && req.method === 'POST') return Response.json({ deviceCode: 'preview-device', userCode: 'ABC123', verificationUri: 'https://microsoft.com/devicelogin', interval: 5 });
@@ -127,7 +182,7 @@ const server = Bun.serve({
       if (path === '/api/messages' && req.method === 'POST') {
         if (body.text === 'simulate-error') return Response.json({ error: 'Preview: simulated send failure' }, { status: 503 });
         const seq = Math.max(...state.messages.map(message => message.seq)) + 1;
-        state.messages.push({ id: `preview-${seq}`, botId: body.botId, conversationId: 'default', sender: 'user', kind: 'message', text: body.text, createdAt: new Date().toISOString(), seq, status: 'sent' });
+        state.messages.push({ id: `preview-${seq}`, botId: body.botId, conversationId: 'default', sender: 'user', kind: 'message', text: body.text, createdAt: new Date().toISOString(), seq, status: 'sent', ...(Array.isArray(body.attachments) ? { attachments: body.attachments } : {}) });
         publish(); return Response.json({ accepted: true }, { status: 202 });
       }
       if (path === '/api/computer/doctor') return Response.json({
