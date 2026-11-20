@@ -40,7 +40,7 @@ dudu server (Bun)
 每个 Bot 同时只有一个 Pi session 和模型执行循环。
 
 - **空闲时**：取全部 pending 事件，按 `seq` 合并为一个 prompt 交付；所有事件一起标记 `delivering`，只创建一个 run。若存在 digest，会作为这次 prompt 的前缀。
-- **运行中**：新事件按 priority 处理，`high` 使用 steer，其余使用 followUp。
+- **运行中**：新事件按 priority 处理，`high` 使用 steer，其余使用 followUp。Web、微信、Bot 间消息和 reaction 都是 `high`，会在当前工具轮结束后注入；steer 提示要求把它们视为更正或补充，不擅自放弃当前任务。
 - 任何 `delivery="wake"` 事件都会唤醒 Scheduler，包括 Bot 对 Bot 的消息和 Agent 自己提交的事件；不会等下一次人类消息。
 - 决策锁只保护短入队逻辑，不等模型整轮。
 - `agent_end` 不结算；`agent_settled` 才结算本轮。

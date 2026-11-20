@@ -79,6 +79,7 @@ test('advanced mode gates workspace files while composer uploads stay available'
     expect(stored?.attachments?.[0]).toMatchObject({ name: 'upload.txt', mime: 'text/plain', size: 8 });
     const event = app.store.replay(cursor).find(entry => entry.type === 'message.web');
     expect(event?.payload).toMatchObject({ text: '', attachments: [{ name: 'upload.txt', path: 'uploads/upload.txt', mime: 'text/plain' }] });
+    expect(event?.priority).toBe('high');
     expect((await call('/api/messages', { method: 'POST', body: JSON.stringify({ botId: 'a', text: '' }) })).status).toBe(400);
     expect((await call('/api/messages', { method: 'POST', body: JSON.stringify({ botId: 'a', text: 'x', attachments: [{ path: '../bot.json' }] }) })).status).toBe(400);
 

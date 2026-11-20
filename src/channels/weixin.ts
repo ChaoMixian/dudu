@@ -465,6 +465,7 @@ export class WeixinService {
       botId,
       sourceId: `weixin:${connectorId}`,
       type: 'message.weixin',
+      priority: 'high',
       payload: {
         text,
         from,

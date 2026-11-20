@@ -40,7 +40,7 @@ The dedupe key is `botId + sourceId + dedupeKey`. Event IDs are globally unique.
 Each Bot has exactly one Pi session and one model execution loop at a time.
 
 - **Idle**: take all pending events and deliver them as one prompt in `seq` order; mark them all `delivering` and create one run.
-- **Running**: new events follow priority; `high` uses steer and the rest use followUp.
+- **Running**: new events follow priority; `high` uses steer and the rest use followUp. Web, WeChat, Bot-to-Bot messages, and reactions are `high`, so they arrive after the current tool round; the steer prompt tells the Bot to treat them as corrections or additions without abandoning the current task.
 - Any event with `delivery="wake"` wakes the Scheduler, including Bot-to-Bot messages and events submitted by the Agent itself; it does not wait for the next human message.
 - The decision lock only covers short enqueue logic, not the whole model turn.
 - `agent_end` does not settle the run; `agent_settled` does.

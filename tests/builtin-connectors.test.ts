@@ -212,6 +212,7 @@ describe('weixin service', () => {
       const events = store.pending('bot-a');
       expect(events).toHaveLength(1);
       expect(events[0]!.type).toBe('message.weixin');
+      expect(events[0]!.priority).toBe('high');
       expect(events[0]!.payload).toMatchObject({
         text: '你好',
         peer: 'peer-1',
